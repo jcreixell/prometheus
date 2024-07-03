@@ -357,10 +357,10 @@ func (ls Labels) DropMetricName() Labels {
 	return ls
 }
 
-// DropMetricDeleteName returns Labels with "__delete__name__" removed.
+// DropMetricDeleteName returns Labels with "__deleted__name__" removed.
 func (ls Labels) DropMetricDeleteName() Labels {
 	for i, l := range ls {
-		if l.Name == "__delete"+MetricName {
+		if l.Name == "__deleted"+MetricName {
 			if i == 0 { // Make common case fast with no allocations.
 				return ls[1:]
 			}
@@ -372,10 +372,10 @@ func (ls Labels) DropMetricDeleteName() Labels {
 	return ls
 }
 
-// RestoreMetricName returns Labels with restored "__name__" label from "__delete__name__".
+// RestoreMetricName returns Labels with restored "__name__" label from "__deleted__name__".
 func (ls Labels) RestoreMetricName() Labels {
 	for i, l := range ls {
-		if l.Name == "__delete"+MetricName {
+		if l.Name == "__deleted"+MetricName {
 			ls[i].Name = MetricName
 		}
 	}
@@ -386,7 +386,7 @@ func (ls Labels) RestoreMetricName() Labels {
 func (ls Labels) FlagMetricNameForDeletion() Labels {
 	for i, l := range ls {
 		if l.Name == MetricName {
-			ls[i].Name = "__delete" + ls[i].Name
+			ls[i].Name = "__deleted" + ls[i].Name
 		}
 	}
 	return ls
