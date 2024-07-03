@@ -1080,6 +1080,9 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 		for i := range mat {
 			mat[i].Metric = mat[i].Metric.DropMetricDeleteName()
 		}
+		if mat.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
 	}
 	return v, ws, nil
 }
