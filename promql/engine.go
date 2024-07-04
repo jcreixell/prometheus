@@ -2580,7 +2580,7 @@ func signatureFunc(on bool, b []byte, names ...string) func(labels.Labels) strin
 			return string(lset.BytesWithLabels(b, names...))
 		}
 	}
-	names = append([]string{labels.MetricName}, names...)
+	names = append([]string{labels.MetricName, labels.DeletedMetricName}, names...)
 	slices.Sort(names)
 	return func(lset labels.Labels) string {
 		return string(lset.BytesWithoutLabels(b, names...))
