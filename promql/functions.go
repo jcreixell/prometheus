@@ -1386,7 +1386,8 @@ func (ev *evaluator) evalLabelReplace(args parser.Expressions) (parser.Value, an
 	lb := labels.NewBuilder(labels.EmptyLabels())
 
 	for i, el := range matrix {
-		if src == labels.MetricName {
+		shouldRestoreName := el.Metric.Has(labels.DeletedMetricName)
+		if shouldRestoreName && src == labels.MetricName {
 			matrix[i].Metric = matrix[i].Metric.RestoreMetricName()
 		}
 		srcVal := el.Metric.Get(src)
@@ -1397,7 +1398,7 @@ func (ev *evaluator) evalLabelReplace(args parser.Expressions) (parser.Value, an
 			lb.Set(dst, string(res))
 			matrix[i].Metric = lb.Labels()
 		}
-		if dst != labels.MetricName {
+		if shouldRestoreName && dst != labels.MetricName {
 			matrix[i].Metric = matrix[i].Metric.FlagMetricNameForDeletion()
 		}
 	}
