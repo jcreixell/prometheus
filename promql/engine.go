@@ -1764,7 +1764,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		mat := val.(Matrix)
 		if e.Op == parser.SUB {
 			for i := range mat {
-				mat[i].Metric = mat[i].Metric.DropMetricName()
+				mat[i].Metric = mat[i].Metric.FlagMetricNameForDeletion()
 				for j := range mat[i].Floats {
 					mat[i].Floats[j].F = -mat[i].Floats[j].F
 				}
@@ -2541,7 +2541,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 		}
 		metric := resultMetric(ls.Metric, rs.Metric, op, matching, enh)
 		if returnBool {
-			metric = metric.DropMetricName()
+			metric = metric.FlagMetricNameForDeletion()
 		}
 		insertedSigs, exists := matchedSigs[sig]
 		if matching.Card == parser.CardOneToOne {
@@ -2667,7 +2667,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			lhsSample.F = float
 			lhsSample.H = histogram
 			if shouldDropMetricName(op) || returnBool {
-				lhsSample.Metric = lhsSample.Metric.DropMetricName()
+				lhsSample.Metric = lhsSample.Metric.FlagMetricNameForDeletion()
 			}
 			enh.Out = append(enh.Out, lhsSample)
 		}

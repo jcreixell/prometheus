@@ -58,7 +58,7 @@ func (ls Labels) MatchLabels(on bool, names ...string) Labels {
 	}
 
 	for _, v := range ls {
-		if _, ok := nameSet[v.Name]; on == ok && (on || v.Name != MetricName) {
+		if _, ok := nameSet[v.Name]; on == ok && (on || (v.Name != MetricName) && v.Name != DeletedMetricName) {
 			matchedLabels = append(matchedLabels, v)
 		}
 	}
@@ -126,7 +126,7 @@ func (ls Labels) HashWithoutLabels(b []byte, names ...string) (uint64, []byte) {
 		for j < len(names) && names[j] < ls[i].Name {
 			j++
 		}
-		if ls[i].Name == MetricName || (j < len(names) && ls[i].Name == names[j]) {
+		if ls[i].Name == MetricName || ls[i].Name == DeletedMetricName || (j < len(names) && ls[i].Name == names[j]) {
 			continue
 		}
 		b = append(b, ls[i].Name...)
@@ -360,7 +360,7 @@ func (ls Labels) DropMetricName() Labels {
 // DropMetricDeleteName returns Labels with "__deleted__name__" removed.
 func (ls Labels) DropMetricDeleteName() Labels {
 	for i, l := range ls {
-		if l.Name == "__deleted"+MetricName {
+		if l.Name == DeletedMetricName {
 			if i == 0 { // Make common case fast with no allocations.
 				return ls[1:]
 			}
@@ -375,7 +375,7 @@ func (ls Labels) DropMetricDeleteName() Labels {
 // RestoreMetricName returns Labels with restored "__name__" label from "__deleted__name__".
 func (ls Labels) RestoreMetricName() Labels {
 	for i, l := range ls {
-		if l.Name == "__deleted"+MetricName {
+		if l.Name == DeletedMetricName {
 			ls[i].Name = MetricName
 		}
 	}
@@ -386,7 +386,7 @@ func (ls Labels) RestoreMetricName() Labels {
 func (ls Labels) FlagMetricNameForDeletion() Labels {
 	for i, l := range ls {
 		if l.Name == MetricName {
-			ls[i].Name = "__deleted" + ls[i].Name
+			ls[i].Name = DeletedMetricName
 		}
 	}
 	return ls
