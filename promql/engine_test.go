@@ -3101,6 +3101,146 @@ func TestInstantQueryWithRangeVectorSelector(t *testing.T) {
 	}
 }
 
+func TestDropMetricName(t *testing.T) {
+	engine := newTestEngine()
+
+	baseT := timestamp.Time(0)
+	storage := promqltest.LoadedStorage(t, `
+		load 1m
+			some_metric{env="1"} 1
+			some_other_metric{env="1"} 2
+	`)
+	t.Cleanup(func() { require.NoError(t, storage.Close()) })
+
+	testCases := map[string]struct {
+		expr        string
+		expected    promql.Vector
+		expectedErr string
+		ts          time.Time
+	}{
+		"does not drop __name__ for instant queries": {
+			expr: "{__name__!=\"\"}",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
+				},
+				promql.Sample{
+					F:      2,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+				},
+			},
+		},
+		"drops __name__ for functions": {
+			expr:        "count_over_time({__name__!=\"\"}[1m])",
+			ts:          baseT,
+			expectedErr: "vector cannot contain metrics with the same labelset",
+		},
+		"drops __name__ for unary expressions": {
+			expr:        "-{__name__!=\"\"}",
+			ts:          baseT,
+			expectedErr: "vector cannot contain metrics with the same labelset",
+		},
+		"drops __name__ for binary operations": {
+			expr:        "{__name__!=\"\"} + {__name__!=\"\"}",
+			ts:          baseT,
+			expectedErr: "vector cannot contain metrics with the same labelset",
+		},
+		"drops __name__ for vector-scalar binary operations": {
+			expr:        "{__name__!=\"\"} * 2",
+			ts:          baseT,
+			expectedErr: "vector cannot contain metrics with the same labelset",
+		},
+		"allows relabeling using __name__ via label_replace": {
+			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"$1\", \"__name__\", \"(.+)\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:              1,
+					T:              0,
+					Metric:         labels.FromStrings("original_name", "some_metric", "env", "1"),
+					ShouldDropName: true,
+				},
+				promql.Sample{
+					F:              1,
+					T:              0,
+					Metric:         labels.FromStrings("original_name", "some_other_metric", "env", "1"),
+					ShouldDropName: true,
+				},
+			},
+		},
+		"allows relabeling using __name__ via label_join": {
+			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"-\", \"__name__\", \"env\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:              1,
+					T:              0,
+					Metric:         labels.FromStrings("original_name", "some_metric-1", "env", "1"),
+					ShouldDropName: true,
+				},
+				promql.Sample{
+					F:              1,
+					T:              0,
+					Metric:         labels.FromStrings("original_name", "some_other_metric-1", "env", "1"),
+					ShouldDropName: true,
+				},
+			},
+		},
+		"allows preserving __name__ via label_replace": {
+			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"$1\", \"__name__\", \"(.+)\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
+				},
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+				},
+			},
+		},
+		"allows preserving __name__ via label_join": {
+			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"-\", \"__name__\", \"env\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_metric-1", "env", "1"),
+				},
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_other_metric-1", "env", "1"),
+				},
+			},
+		},
+	}
+
+	for name, testCase := range testCases {
+		t.Run(name, func(t *testing.T) {
+			q, err := engine.NewInstantQuery(context.Background(), storage, nil, testCase.expr, testCase.ts)
+			require.NoError(t, err)
+			defer q.Close()
+
+			res := q.Exec(context.Background())
+			if testCase.expectedErr != "" {
+				require.Error(t, res.Err, testCase.expectedErr)
+			} else {
+				require.NoError(t, res.Err)
+				testutil.RequireEqual(t, testCase.expected, res.Value)
+			}
+		})
+	}
+}
+
 func TestNativeHistogram_Sum_Count_Add_AvgOperator(t *testing.T) {
 	// TODO(codesome): Integrate histograms into the PromQL testing framework
 	// and write more tests there.
