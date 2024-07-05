@@ -1075,12 +1075,19 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	v, ws = ev.eval(expr)
 
 	if v.Type() == parser.ValueTypeMatrix {
-		// test label_replace(count_over_time({__name__!=""}[1m]), "name_label", "$1", "__name__", "(.+)")
 		mat := v.(Matrix)
 		for i := range mat {
 			mat[i].Metric = mat[i].Metric.DropMetricDeleteName()
 		}
 		if mat.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	} else if v.Type() == parser.ValueTypeVector {
+		vec := v.(Vector)
+		for i := range vec {
+			vec[i].Metric = vec[i].Metric.DropMetricDeleteName()
+		}
+		if vec.ContainsSameLabelset() {
 			ev.errorf("vector cannot contain metrics with the same labelset")
 		}
 	}
