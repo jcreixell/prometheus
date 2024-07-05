@@ -1077,7 +1077,7 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	if v.Type() == parser.ValueTypeMatrix {
 		mat := v.(Matrix)
 		for i := range mat {
-			mat[i].Metric = mat[i].Metric.DropMetricDeleteName()
+			mat[i].Metric = mat[i].Metric.DropMetricDeletedName()
 		}
 		if mat.ContainsSameLabelset() {
 			ev.errorf("vector cannot contain metrics with the same labelset")
@@ -1085,7 +1085,7 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	} else if v.Type() == parser.ValueTypeVector {
 		vec := v.(Vector)
 		for i := range vec {
-			vec[i].Metric = vec[i].Metric.DropMetricDeleteName()
+			vec[i].Metric = vec[i].Metric.DropMetricDeletedName()
 		}
 		if vec.ContainsSameLabelset() {
 			ev.errorf("vector cannot contain metrics with the same labelset")
@@ -1633,7 +1633,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 			// vector functions, the only change needed is to drop the
 			// metric name in the output.
 			if e.Func.Name != "last_over_time" {
-				metric = metric.FlagMetricNameForDeletion()
+				metric = metric.MarkMetricNameForDeletion()
 			}
 			ss := Series{
 				Metric: metric,
@@ -1771,7 +1771,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		mat := val.(Matrix)
 		if e.Op == parser.SUB {
 			for i := range mat {
-				mat[i].Metric = mat[i].Metric.FlagMetricNameForDeletion()
+				mat[i].Metric = mat[i].Metric.MarkMetricNameForDeletion()
 				for j := range mat[i].Floats {
 					mat[i].Floats[j].F = -mat[i].Floats[j].F
 				}
@@ -2548,7 +2548,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 		}
 		metric := resultMetric(ls.Metric, rs.Metric, op, matching, enh)
 		if returnBool {
-			metric = metric.FlagMetricNameForDeletion()
+			metric = metric.MarkMetricNameForDeletion()
 		}
 		insertedSigs, exists := matchedSigs[sig]
 		if matching.Card == parser.CardOneToOne {
@@ -2674,7 +2674,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			lhsSample.F = float
 			lhsSample.H = histogram
 			if shouldDropMetricName(op) || returnBool {
-				lhsSample.Metric = lhsSample.Metric.FlagMetricNameForDeletion()
+				lhsSample.Metric = lhsSample.Metric.MarkMetricNameForDeletion()
 			}
 			enh.Out = append(enh.Out, lhsSample)
 		}
