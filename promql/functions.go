@@ -1447,12 +1447,20 @@ func (ev *evaluator) evalLabelJoin(args parser.Expressions) (parser.Value, annot
 
 	for i, el := range matrix {
 		for i, src := range srcLabels {
+			if src == labels.MetricName && el.Metric.Has(labels.DeletedMetricName) {
+				src = labels.DeletedMetricName
+			}
+
 			srcVals[i] = el.Metric.Get(src)
 		}
 		strval := strings.Join(srcVals, sep)
 		lb.Reset(el.Metric)
 		lb.Set(dst, strval)
 		matrix[i].Metric = lb.Labels()
+
+		if dst != labels.MetricName && matrix[i].Metric.Has(labels.DeletedMetricName) {
+			matrix[i].Metric = matrix[i].Metric.DropMetricDeleteName()
+		}
 	}
 
 	return matrix, ws

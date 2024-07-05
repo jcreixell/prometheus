@@ -3149,7 +3149,7 @@ func TestDropMetricName(t *testing.T) {
 			ts:          baseT,
 			expectedErr: "vector cannot contain metrics with the same labelset",
 		},
-		"allows relabeling __name__ via label_replace": {
+		"allows relabeling using __name__ via label_replace": {
 			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"$1\", \"__name__\", \"(.+)\")",
 			ts:   baseT,
 			expected: promql.Vector{
@@ -3165,19 +3165,51 @@ func TestDropMetricName(t *testing.T) {
 				},
 			},
 		},
-		"allows preserving __name__ via label_replace": {
-			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"count_over_time_$1\", \"__name__\", \"(.+)\")",
+		"allows relabeling using __name__ via label_join": {
+			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"-\", \"__name__\", \"env\")",
 			ts:   baseT,
 			expected: promql.Vector{
 				promql.Sample{
 					F:      1,
 					T:      0,
-					Metric: labels.FromStrings("__name__", "count_over_time_some_metric", "env", "1"),
+					Metric: labels.FromStrings("original_name", "some_metric-1", "env", "1"),
 				},
 				promql.Sample{
 					F:      1,
 					T:      0,
-					Metric: labels.FromStrings("__name__", "count_over_time_some_other_metric", "env", "1"),
+					Metric: labels.FromStrings("original_name", "some_other_metric-1", "env", "1"),
+				},
+			},
+		},
+		"allows preserving __name__ via label_replace": {
+			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"$1\", \"__name__\", \"(.+)\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
+				},
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+				},
+			},
+		},
+		"allows preserving __name__ via label_join": {
+			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"-\", \"__name__\", \"env\")",
+			ts:   baseT,
+			expected: promql.Vector{
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_metric-1", "env", "1"),
+				},
+				promql.Sample{
+					F:      1,
+					T:      0,
+					Metric: labels.FromStrings("__name__", "some_other_metric-1", "env", "1"),
 				},
 			},
 		},
