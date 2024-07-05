@@ -1465,6 +1465,12 @@ func (ev *evaluator) evalLabelJoin(args parser.Expressions) (parser.Value, annot
 		lb.Reset(el.Metric)
 		lb.Set(dst, strval)
 		matrix[i].Metric = lb.Labels()
+
+		if dst == model.MetricNameLabel {
+			matrix[i].ShouldDropName = false
+		} else {
+			matrix[i].ShouldDropName = el.ShouldDropName
+		}
 	}
 
 	return matrix, ws
