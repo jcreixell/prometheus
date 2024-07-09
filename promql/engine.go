@@ -1073,28 +1073,7 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	defer ev.recover(expr, &ws, &err)
 
 	v, ws = ev.eval(expr)
-
-	if v.Type() == parser.ValueTypeMatrix {
-		mat := v.(Matrix)
-		for i := range mat {
-			if mat[i].ShouldDropName {
-				mat[i].Metric = mat[i].Metric.DropMetricName()
-			}
-		}
-		if mat.ContainsSameLabelset() {
-			ev.errorf("vector cannot contain metrics with the same labelset")
-		}
-	} else if v.Type() == parser.ValueTypeVector {
-		vec := v.(Vector)
-		for i := range vec {
-			if vec[i].ShouldDropName {
-				vec[i].Metric = vec[i].Metric.DropMetricName()
-			}
-		}
-		if vec.ContainsSameLabelset() {
-			ev.errorf("vector cannot contain metrics with the same labelset")
-		}
-	}
+	ev.cleanupMetricLabels(v)
 	return v, ws, nil
 }
 
@@ -3137,6 +3116,30 @@ func (ev *evaluator) aggregationCountValues(e *parser.AggregateExpr, grouping []
 		})
 	}
 	return enh.Out, nil
+}
+
+func (ev *evaluator) cleanupMetricLabels(v parser.Value) {
+	if v.Type() == parser.ValueTypeMatrix {
+		mat := v.(Matrix)
+		for i := range mat {
+			if mat[i].ShouldDropName {
+				mat[i].Metric = mat[i].Metric.DropMetricName()
+			}
+		}
+		if mat.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	} else if v.Type() == parser.ValueTypeVector {
+		vec := v.(Vector)
+		for i := range vec {
+			if vec[i].ShouldDropName {
+				vec[i].Metric = vec[i].Metric.DropMetricName()
+			}
+		}
+		if vec.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	}
 }
 
 func addToSeries(ss *Series, ts int64, f float64, h *histogram.FloatHistogram, numSteps int) {
