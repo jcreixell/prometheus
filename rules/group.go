@@ -495,7 +495,7 @@ func (g *Group) Eval(ctx context.Context, ts time.Time) {
 			}
 			rule.SetHealth(HealthGood)
 			rule.SetLastError(nil)
-			samplesTotal.Add(float64(len(vector)))
+			samplesTotal.Add(float64(len(vector.Samples)))
 
 			if ar, ok := rule.(*AlertingRule); ok {
 				ar.sendAlerts(ctx, ts, g.opts.ResendDelay, g.interval, g.opts.NotifyFunc)
@@ -521,7 +521,7 @@ func (g *Group) Eval(ctx context.Context, ts time.Time) {
 				g.seriesInPreviousEval[i] = seriesReturned
 			}()
 
-			for _, s := range vector {
+			for _, s := range vector.Samples {
 				if s.H != nil {
 					_, err = app.AppendHistogram(0, s.Metric, s.T, nil, s.H)
 				} else {

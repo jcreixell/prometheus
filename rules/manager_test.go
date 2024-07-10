@@ -72,7 +72,7 @@ func TestAlertingRule(t *testing.T) {
 		labels.FromStrings("severity", "{{\"c\"}}ritical"),
 		labels.EmptyLabels(), labels.EmptyLabels(), "", true, nil,
 	)
-	result := promql.Vector{
+	result := []promql.Sample{
 		promql.Sample{
 			Metric: labels.FromStrings(
 				"__name__", "ALERTS",
@@ -127,7 +127,7 @@ func TestAlertingRule(t *testing.T) {
 
 	tests := []struct {
 		time   time.Duration
-		result promql.Vector
+		result []promql.Sample
 	}{
 		{
 			time:   0,
@@ -168,10 +168,10 @@ func TestAlertingRule(t *testing.T) {
 		require.NoError(t, err)
 
 		var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
-		for _, smpl := range res {
+		for _, smpl := range res.Samples {
 			smplName := smpl.Metric.Get("__name__")
 			if smplName == "ALERTS" {
-				filteredRes = append(filteredRes, smpl)
+				filteredRes.Samples = append(filteredRes.Samples, smpl)
 			} else {
 				// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 				require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -180,10 +180,10 @@ func TestAlertingRule(t *testing.T) {
 		for i := range test.result {
 			test.result[i].T = timestamp.FromTime(evalTime)
 		}
-		require.Equal(t, len(test.result), len(filteredRes), "%d. Number of samples in expected and actual output don't match (%d vs. %d)", i, len(test.result), len(res))
+		require.Equal(t, len(test.result), len(filteredRes.Samples), "%d. Number of samples in expected and actual output don't match (%d vs. %d)", i, len(test.result), len(res.Samples))
 
-		sort.Slice(filteredRes, func(i, j int) bool {
-			return labels.Compare(filteredRes[i].Metric, filteredRes[j].Metric) < 0
+		sort.Slice(filteredRes.Samples, func(i, j int) bool {
+			return labels.Compare(filteredRes.Samples[i].Metric, filteredRes.Samples[j].Metric) < 0
 		})
 		prom_testutil.RequireEqual(t, test.result, filteredRes)
 
@@ -214,7 +214,7 @@ func TestForStateAddSamples(t *testing.T) {
 				labels.FromStrings("severity", "{{\"c\"}}ritical"),
 				labels.EmptyLabels(), labels.EmptyLabels(), "", true, nil,
 			)
-			result := promql.Vector{
+			result := []promql.Sample{
 				promql.Sample{
 					Metric: labels.FromStrings(
 						"__name__", "ALERTS_FOR_STATE",
@@ -265,21 +265,21 @@ func TestForStateAddSamples(t *testing.T) {
 
 			tests := []struct {
 				time            time.Duration
-				result          promql.Vector
+				result          []promql.Sample
 				persistThisTime bool // If true, it means this 'time' is persisted for 'for'.
 			}{
 				{
 					time:            0,
-					result:          append(promql.Vector{}, result[:2]...),
+					result:          append([]promql.Sample{}, result[:2]...),
 					persistThisTime: true,
 				},
 				{
 					time:   5 * time.Minute,
-					result: append(promql.Vector{}, result[2:]...),
+					result: append([]promql.Sample{}, result[2:]...),
 				},
 				{
 					time:   10 * time.Minute,
-					result: append(promql.Vector{}, result[2:3]...),
+					result: append([]promql.Sample{}, result[2:3]...),
 				},
 				{
 					time:   15 * time.Minute,
@@ -291,12 +291,12 @@ func TestForStateAddSamples(t *testing.T) {
 				},
 				{
 					time:            25 * time.Minute,
-					result:          append(promql.Vector{}, result[:1]...),
+					result:          append([]promql.Sample{}, result[:1]...),
 					persistThisTime: true,
 				},
 				{
 					time:   30 * time.Minute,
-					result: append(promql.Vector{}, result[2:3]...),
+					result: append([]promql.Sample{}, result[2:3]...),
 				},
 			}
 
@@ -316,10 +316,10 @@ func TestForStateAddSamples(t *testing.T) {
 				require.NoError(t, err)
 
 				var filteredRes promql.Vector // After removing 'ALERTS' samples.
-				for _, smpl := range res {
+				for _, smpl := range res.Samples {
 					smplName := smpl.Metric.Get("__name__")
 					if smplName == "ALERTS_FOR_STATE" {
-						filteredRes = append(filteredRes, smpl)
+						filteredRes.Samples = append(filteredRes.Samples, smpl)
 					} else {
 						// If not 'ALERTS_FOR_STATE', it has to be 'ALERTS'.
 						require.Equal(t, "ALERTS", smplName)
@@ -332,10 +332,10 @@ func TestForStateAddSamples(t *testing.T) {
 						test.result[i].F = forState
 					}
 				}
-				require.Equal(t, len(test.result), len(filteredRes), "%d. Number of samples in expected and actual output don't match (%d vs. %d)", i, len(test.result), len(res))
+				require.Equal(t, len(test.result), len(filteredRes.Samples), "%d. Number of samples in expected and actual output don't match (%d vs. %d)", i, len(test.result), len(res.Samples))
 
-				sort.Slice(filteredRes, func(i, j int) bool {
-					return labels.Compare(filteredRes[i].Metric, filteredRes[j].Metric) < 0
+				sort.Slice(filteredRes.Samples, func(i, j int) bool {
+					return labels.Compare(filteredRes.Samples[i].Metric, filteredRes.Samples[j].Metric) < 0
 				})
 				prom_testutil.RequireEqual(t, test.result, filteredRes)
 
@@ -1477,7 +1477,7 @@ func TestManager_LoadGroups_ShouldCheckWhetherEachRuleHasDependentsAndDependenci
 		Context:    context.Background(),
 		Logger:     log.NewNopLogger(),
 		Appendable: storage,
-		QueryFunc:  func(ctx context.Context, q string, ts time.Time) (promql.Vector, error) { return nil, nil },
+		QueryFunc:  func(ctx context.Context, q string, ts time.Time) (promql.Vector, error) { return promql.Vector{}, nil },
 	})
 
 	t.Run("load a mix of dependent and independent rules", func(t *testing.T) {
@@ -2149,7 +2149,7 @@ func optsFactory(storage storage.Storage, maxInflight, inflightQueries *atomic.I
 
 			// Return a stub sample.
 			return promql.Vector{
-				promql.Sample{Metric: labels.FromStrings("__name__", "test"), T: ts.UnixMilli(), F: 12345},
+				Samples: []promql.Sample{promql.Sample{Metric: labels.FromStrings("__name__", "test"), T: ts.UnixMilli(), F: 12345}},
 			}, nil
 		},
 	}

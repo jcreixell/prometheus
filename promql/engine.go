@@ -738,14 +738,16 @@ func (ng *Engine) execEvalStmt(ctx context.Context, query *query, s *parser.Eval
 		switch s.Expr.Type() {
 		case parser.ValueTypeVector:
 			// Convert matrix with one value per series into vector.
-			vector := make(Vector, len(mat))
+			vector := Vector{
+				Samples: make([]Sample, len(mat)),
+			}
 			for i, s := range mat {
 				// Point might have a different timestamp, force it to the evaluation
 				// timestamp as that is when we ran the evaluation.
 				if len(s.Histograms) > 0 {
-					vector[i] = Sample{Metric: s.Metric, H: s.Histograms[0].H, T: start, ShouldDropName: s.ShouldDropName}
+					vector.Samples[i] = Sample{Metric: s.Metric, H: s.Histograms[0].H, T: start}
 				} else {
-					vector[i] = Sample{Metric: s.Metric, F: s.Floats[0].F, T: start, ShouldDropName: s.ShouldDropName}
+					vector.Samples[i] = Sample{Metric: s.Metric, F: s.Floats[0].F, T: start}
 				}
 			}
 			return vector, warnings, nil
@@ -1146,12 +1148,16 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 	// the most time series.
 	biggestLen := 1
 	for i := range exprs {
-		vectors[i] = make(Vector, 0, len(matrixes[i]))
+		vectors[i] = Vector{
+			Samples: make([]Sample, 0, len(matrixes[i])),
+		}
 		if len(matrixes[i]) > biggestLen {
 			biggestLen = len(matrixes[i])
 		}
 	}
-	enh := &EvalNodeHelper{Out: make(Vector, 0, biggestLen)}
+	enh := &EvalNodeHelper{Out: Vector{
+		Samples: make([]Sample, 0, biggestLen),
+	}}
 	type seriesAndTimestamp struct {
 		Series
 		ts int64
@@ -1188,7 +1194,7 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 		ev.currentSamples = tempNumSamples
 		// Gather input vectors for this timestamp.
 		for i := range exprs {
-			vectors[i] = vectors[i][:0]
+			vectors[i].Samples = vectors[i].Samples[:0]
 
 			if prepSeries != nil {
 				bufHelpers[i] = bufHelpers[i][:0]
@@ -1197,12 +1203,12 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 			for si, series := range matrixes[i] {
 				switch {
 				case len(series.Floats) > 0 && series.Floats[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts})
+					vectors[i].Samples = append(vectors[i].Samples, Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts})
 					// Move input vectors forward so we don't have to re-scan the same
 					// past points at the next step.
 					matrixes[i][si].Floats = series.Floats[1:]
 				case len(series.Histograms) > 0 && series.Histograms[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts})
+					vectors[i].Samples = append(vectors[i].Samples, Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts})
 					matrixes[i][si].Histograms = series.Histograms[1:]
 				default:
 					continue
@@ -1225,7 +1231,7 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 		// Make the function call.
 		enh.Ts = ts
 		result, ws := funcCall(args, bufHelpers, enh)
-		enh.Out = result[:0] // Reuse result vector.
+		enh.Out.Samples = result.Samples[:0] // Reuse result vector.
 		warnings.Merge(ws)
 
 		vecNumSamples := result.TotalSamples()
@@ -1244,12 +1250,12 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 			if result.ContainsSameLabelset() {
 				ev.errorf("vector cannot contain metrics with the same labelset")
 			}
-			mat := make(Matrix, len(result))
-			for i, s := range result {
+			mat := make(Matrix, len(result.Samples))
+			for i, s := range result.Samples {
 				if s.H == nil {
-					mat[i] = Series{Metric: s.Metric, Floats: []FPoint{{T: ts, F: s.F}}, ShouldDropName: s.ShouldDropName}
+					mat[i] = Series{Metric: s.Metric, Floats: []FPoint{{T: ts, F: s.F}}, ShouldDropName: result.ShouldDropName}
 				} else {
-					mat[i] = Series{Metric: s.Metric, Histograms: []HPoint{{T: ts, H: s.H}}, ShouldDropName: s.ShouldDropName}
+					mat[i] = Series{Metric: s.Metric, Histograms: []HPoint{{T: ts, H: s.H}}, ShouldDropName: result.ShouldDropName}
 				}
 			}
 			ev.currentSamples = originalNumSamples + mat.TotalSamples()
@@ -1258,7 +1264,7 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 		}
 
 		// Add samples in output vector to output series.
-		for _, sample := range result {
+		for _, sample := range result.Samples {
 			h := sample.Metric.Hash()
 			ss, ok := seriess[h]
 			if ok {
@@ -1270,7 +1276,6 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 				ss = seriesAndTimestamp{Series{Metric: sample.Metric}, ts}
 			}
 			addToSeries(&ss.Series, enh.Ts, sample.F, sample.H, numSteps)
-			ss.ShouldDropName = sample.ShouldDropName
 			seriess[h] = ss
 		}
 	}
@@ -1564,7 +1569,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 			if i != matrixArgIndex {
 				val, ws := ev.eval(e)
 				otherArgs[i] = val.(Matrix)
-				otherInArgs[i] = Vector{Sample{}}
+				otherInArgs[i] = Vector{Samples: []Sample{}}
 				inArgs[i] = otherInArgs[i]
 				warnings.Merge(ws)
 			}
@@ -1594,7 +1599,9 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		var prevSS *Series
 		inMatrix := make(Matrix, 1)
 		inArgs[matrixArgIndex] = inMatrix
-		enh := &EvalNodeHelper{Out: make(Vector, 0, 1)}
+		enh := &EvalNodeHelper{Out: Vector{
+			Samples: make([]Sample, 0, 1),
+		}}
 		// Process all the calls for one time series at a time.
 		it := storage.NewBuffer(selRange)
 		var chkIter chunkenc.Iterator
@@ -1631,7 +1638,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 				// when looking up the argument, as there will be no gaps.
 				for j := range e.Args {
 					if j != matrixArgIndex {
-						otherInArgs[j][0].F = otherArgs[j][0].Floats[step].F
+						otherInArgs[j].Samples[0].F = otherArgs[j][0].Floats[step].F
 					}
 				}
 				// Evaluate the matrix selector for this series
@@ -1653,19 +1660,19 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 				warnings.Merge(annos)
 				ev.samplesStats.IncrementSamplesAtStep(step, int64(len(floats)+totalHPointSize(histograms)))
 
-				enh.Out = outVec[:0]
-				if len(outVec) > 0 {
-					if outVec[0].H == nil {
+				enh.Out.Samples = outVec.Samples[:0]
+				if len(outVec.Samples) > 0 {
+					if outVec.Samples[0].H == nil {
 						if ss.Floats == nil {
 							ss.Floats = reuseOrGetFPointSlices(prevSS, numSteps)
 						}
 
-						ss.Floats = append(ss.Floats, FPoint{F: outVec[0].F, T: ts})
+						ss.Floats = append(ss.Floats, FPoint{F: outVec.Samples[0].F, T: ts})
 					} else {
 						if ss.Histograms == nil {
 							ss.Histograms = reuseOrGetHPointSlices(prevSS, numSteps)
 						}
-						ss.Histograms = append(ss.Histograms, HPoint{H: outVec[0].H, T: ts})
+						ss.Histograms = append(ss.Histograms, HPoint{H: outVec.Samples[0].H, T: ts})
 					}
 				}
 				// Only buffer stepRange milliseconds from the second step on.
@@ -1772,8 +1779,10 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		switch lt, rt := e.LHS.Type(), e.RHS.Type(); {
 		case lt == parser.ValueTypeScalar && rt == parser.ValueTypeScalar:
 			return ev.rangeEval(nil, func(v []parser.Value, _ [][]EvalSeriesHelper, enh *EvalNodeHelper) (Vector, annotations.Annotations) {
-				val := scalarBinop(e.Op, v[0].(Vector)[0].F, v[1].(Vector)[0].F)
-				return append(enh.Out, Sample{F: val}), nil
+				val := scalarBinop(e.Op, v[0].(Vector).Samples[0].F, v[1].(Vector).Samples[0].F)
+				return Vector{
+					Samples: append(enh.Out.Samples, Sample{F: val}),
+				}, nil
 			}, e.LHS, e.RHS)
 		case lt == parser.ValueTypeVector && rt == parser.ValueTypeVector:
 			// Function to compute the join signature for each series.
@@ -1804,20 +1813,22 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 
 		case lt == parser.ValueTypeVector && rt == parser.ValueTypeScalar:
 			return ev.rangeEval(nil, func(v []parser.Value, _ [][]EvalSeriesHelper, enh *EvalNodeHelper) (Vector, annotations.Annotations) {
-				vec, err := ev.VectorscalarBinop(e.Op, v[0].(Vector), Scalar{V: v[1].(Vector)[0].F}, false, e.ReturnBool, enh)
+				vec, err := ev.VectorscalarBinop(e.Op, v[0].(Vector), Scalar{V: v[1].(Vector).Samples[0].F}, false, e.ReturnBool, enh)
 				return vec, handleVectorBinopError(err, e)
 			}, e.LHS, e.RHS)
 
 		case lt == parser.ValueTypeScalar && rt == parser.ValueTypeVector:
 			return ev.rangeEval(nil, func(v []parser.Value, _ [][]EvalSeriesHelper, enh *EvalNodeHelper) (Vector, annotations.Annotations) {
-				vec, err := ev.VectorscalarBinop(e.Op, v[1].(Vector), Scalar{V: v[0].(Vector)[0].F}, true, e.ReturnBool, enh)
+				vec, err := ev.VectorscalarBinop(e.Op, v[1].(Vector), Scalar{V: v[0].(Vector).Samples[0].F}, true, e.ReturnBool, enh)
 				return vec, handleVectorBinopError(err, e)
 			}, e.LHS, e.RHS)
 		}
 
 	case *parser.NumberLiteral:
 		return ev.rangeEval(nil, func(v []parser.Value, _ [][]EvalSeriesHelper, enh *EvalNodeHelper) (Vector, annotations.Annotations) {
-			return append(enh.Out, Sample{F: e.Val, Metric: labels.EmptyLabels()}), nil
+			return Vector{
+				Samples: append(enh.Out.Samples, Sample{F: e.Val, Metric: labels.EmptyLabels()}),
+			}, nil
 		})
 
 	case *parser.StringLiteral:
@@ -2039,7 +2050,9 @@ func (ev *evaluator) rangeEvalTimestampFunctionOverVectorSelector(vs *parser.Vec
 			vs.Offset = time.Duration(enh.Ts-*vs.Timestamp) * time.Millisecond
 		}
 
-		vec := make(Vector, 0, len(vs.Series))
+		vec := Vector{
+			Samples: make([]Sample, 0, len(vs.Series)),
+		}
 		for i, s := range vs.Series {
 			it := seriesIterators[i]
 			t, _, _, ok := ev.vectorSelectorSingle(it, vs, enh.Ts)
@@ -2048,7 +2061,7 @@ func (ev *evaluator) rangeEvalTimestampFunctionOverVectorSelector(vs *parser.Vec
 			}
 
 			// Note that we ignore the sample values because call only cares about the timestamp.
-			vec = append(vec, Sample{
+			vec.Samples = append(vec.Samples, Sample{
 				Metric: s.Labels(),
 				T:      t,
 			})
@@ -2372,8 +2385,8 @@ func (ev *evaluator) VectorAnd(lhs, rhs Vector, matching *parser.VectorMatching,
 	if matching.Card != parser.CardManyToMany {
 		panic("set operations must only use many-to-many matching")
 	}
-	if len(lhs) == 0 || len(rhs) == 0 {
-		return nil // Short-circuit: AND with nothing is nothing.
+	if len(lhs.Samples) == 0 || len(rhs.Samples) == 0 {
+		return Vector{} // Short-circuit: AND with nothing is nothing.
 	}
 
 	// The set of signatures for the right-hand side Vector.
@@ -2383,10 +2396,10 @@ func (ev *evaluator) VectorAnd(lhs, rhs Vector, matching *parser.VectorMatching,
 		rightSigs[sh.signature] = struct{}{}
 	}
 
-	for i, ls := range lhs {
+	for i, ls := range lhs.Samples {
 		// If there's a matching entry in the right-hand side Vector, add the sample.
 		if _, ok := rightSigs[lhsh[i].signature]; ok {
-			enh.Out = append(enh.Out, ls)
+			enh.Out.Samples = append(enh.Out.Samples, ls)
 		}
 	}
 	return enh.Out
@@ -2396,24 +2409,24 @@ func (ev *evaluator) VectorOr(lhs, rhs Vector, matching *parser.VectorMatching, 
 	switch {
 	case matching.Card != parser.CardManyToMany:
 		panic("set operations must only use many-to-many matching")
-	case len(lhs) == 0: // Short-circuit.
-		enh.Out = append(enh.Out, rhs...)
+	case len(lhs.Samples) == 0: // Short-circuit.
+		enh.Out.Samples = append(enh.Out.Samples, rhs.Samples...)
 		return enh.Out
-	case len(rhs) == 0:
-		enh.Out = append(enh.Out, lhs...)
+	case len(rhs.Samples) == 0:
+		enh.Out.Samples = append(enh.Out.Samples, lhs.Samples...)
 		return enh.Out
 	}
 
 	leftSigs := map[string]struct{}{}
 	// Add everything from the left-hand-side Vector.
-	for i, ls := range lhs {
+	for i, ls := range lhs.Samples {
 		leftSigs[lhsh[i].signature] = struct{}{}
-		enh.Out = append(enh.Out, ls)
+		enh.Out.Samples = append(enh.Out.Samples, ls)
 	}
 	// Add all right-hand side elements which have not been added from the left-hand side.
-	for j, rs := range rhs {
+	for j, rs := range rhs.Samples {
 		if _, ok := leftSigs[rhsh[j].signature]; !ok {
-			enh.Out = append(enh.Out, rs)
+			enh.Out.Samples = append(enh.Out.Samples, rs)
 		}
 	}
 	return enh.Out
@@ -2425,8 +2438,8 @@ func (ev *evaluator) VectorUnless(lhs, rhs Vector, matching *parser.VectorMatchi
 	}
 	// Short-circuit: empty rhs means we will return everything in lhs;
 	// empty lhs means we will return empty - don't need to build a map.
-	if len(lhs) == 0 || len(rhs) == 0 {
-		enh.Out = append(enh.Out, lhs...)
+	if len(lhs.Samples) == 0 || len(rhs.Samples) == 0 {
+		enh.Out.Samples = append(enh.Out.Samples, lhs.Samples...)
 		return enh.Out
 	}
 
@@ -2435,9 +2448,9 @@ func (ev *evaluator) VectorUnless(lhs, rhs Vector, matching *parser.VectorMatchi
 		rightSigs[sh.signature] = struct{}{}
 	}
 
-	for i, ls := range lhs {
+	for i, ls := range lhs.Samples {
 		if _, ok := rightSigs[lhsh[i].signature]; !ok {
-			enh.Out = append(enh.Out, ls)
+			enh.Out.Samples = append(enh.Out.Samples, ls)
 		}
 	}
 	return enh.Out
@@ -2448,8 +2461,8 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 	if matching.Card == parser.CardManyToMany {
 		panic("many-to-many only allowed for set operators")
 	}
-	if len(lhs) == 0 || len(rhs) == 0 {
-		return nil, nil // Short-circuit: nothing is going to match.
+	if len(lhs.Samples) == 0 || len(rhs.Samples) == 0 {
+		return Vector{}, nil // Short-circuit: nothing is going to match.
 	}
 
 	// The control flow below handles one-to-one or many-to-one matching.
@@ -2462,7 +2475,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 
 	// All samples from the rhs hashed by the matching label/values.
 	if enh.rightSigs == nil {
-		enh.rightSigs = make(map[string]Sample, len(enh.Out))
+		enh.rightSigs = make(map[string]Sample, len(enh.Out.Samples))
 	} else {
 		for k := range enh.rightSigs {
 			delete(enh.rightSigs, k)
@@ -2471,7 +2484,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 	rightSigs := enh.rightSigs
 
 	// Add all rhs samples to a map so we can easily find matches later.
-	for i, rs := range rhs {
+	for i, rs := range rhs.Samples {
 		sig := rhsh[i].signature
 		// The rhs is guaranteed to be the 'one' side. Having multiple samples
 		// with the same signature means that the matching is many-to-many.
@@ -2503,7 +2516,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 	// For all lhs samples find a respective rhs sample and perform
 	// the binary operation.
 	var lastErr error
-	for i, ls := range lhs {
+	for i, ls := range lhs.Samples {
 		sig := lhsh[i].signature
 
 		rs, found := rightSigs[sig] // Look for a match in the rhs Vector.
@@ -2554,13 +2567,13 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 			insertedSigs[insertSig] = struct{}{}
 		}
 
-		enh.Out = append(enh.Out, Sample{
-			Metric:         metric,
-			F:              floatValue,
-			H:              histogramValue,
-			ShouldDropName: returnBool,
+		enh.Out.Samples = append(enh.Out.Samples, Sample{
+			Metric: metric,
+			F:      floatValue,
+			H:      histogramValue,
 		})
 	}
+	enh.Out.ShouldDropName = returnBool
 	return enh.Out, lastErr
 }
 
@@ -2582,7 +2595,7 @@ func signatureFunc(on bool, b []byte, names ...string) func(labels.Labels) strin
 // binary operation and the matching options.
 func resultMetric(lhs, rhs labels.Labels, op parser.ItemType, matching *parser.VectorMatching, enh *EvalNodeHelper) labels.Labels {
 	if enh.resultMetric == nil {
-		enh.resultMetric = make(map[string]labels.Labels, len(enh.Out))
+		enh.resultMetric = make(map[string]labels.Labels, len(enh.Out.Samples))
 	}
 
 	enh.resetBuilder(lhs)
@@ -2626,7 +2639,7 @@ func resultMetric(lhs, rhs labels.Labels, op parser.ItemType, matching *parser.V
 // VectorscalarBinop evaluates a binary operation between a Vector and a Scalar.
 func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scalar, swap, returnBool bool, enh *EvalNodeHelper) (Vector, error) {
 	var lastErr error
-	for _, lhsSample := range lhs {
+	for _, lhsSample := range lhs.Samples {
 		lf, rf := lhsSample.F, rhs.V
 		var rh *histogram.FloatHistogram
 		lh := lhsSample.H
@@ -2660,7 +2673,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			if shouldDropMetricName(op) || returnBool {
 				lhsSample.Metric = lhsSample.Metric.DropMetricName()
 			}
-			enh.Out = append(enh.Out, lhsSample)
+			enh.Out.Samples = append(enh.Out.Samples, lhsSample)
 		}
 	}
 	return enh.Out, lastErr
@@ -3057,7 +3070,8 @@ func (ev *evaluator) aggregationK(e *parser.AggregateExpr, k int, inputMatrix Ma
 				sort.Sort(sort.Reverse(aggr.heap))
 			}
 			for _, v := range aggr.heap {
-				add(v.Metric, v.F, v.ShouldDropName)
+				// TODO:(@jcreixell): Figure out what to set here
+				add(v.Metric, v.F, false)
 			}
 
 		case parser.BOTTOMK:
@@ -3066,7 +3080,8 @@ func (ev *evaluator) aggregationK(e *parser.AggregateExpr, k int, inputMatrix Ma
 				sort.Sort(sort.Reverse((*vectorByReverseValueHeap)(&aggr.heap)))
 			}
 			for _, v := range aggr.heap {
-				add(v.Metric, v.F, v.ShouldDropName)
+				// TODO:(@jcreixell): Figure out what to set here
+				add(v.Metric, v.F, false)
 			}
 		}
 	}
@@ -3084,7 +3099,7 @@ func (ev *evaluator) aggregationCountValues(e *parser.AggregateExpr, grouping []
 	result := map[uint64]*groupCount{}
 
 	var buf []byte
-	for _, s := range vec {
+	for _, s := range vec.Samples {
 		enh.resetBuilder(s.Metric)
 		enh.lb.Set(valueLabel, strconv.FormatFloat(s.F, 'f', -1, 64))
 		metric := enh.lb.Labels()
@@ -3110,7 +3125,7 @@ func (ev *evaluator) aggregationCountValues(e *parser.AggregateExpr, grouping []
 
 	// Construct the result Vector from the aggregated groups.
 	for _, aggr := range result {
-		enh.Out = append(enh.Out, Sample{
+		enh.Out.Samples = append(enh.Out.Samples, Sample{
 			Metric: aggr.labels,
 			F:      float64(aggr.count),
 		})
@@ -3131,9 +3146,11 @@ func (ev *evaluator) cleanupMetricLabels(v parser.Value) {
 		}
 	} else if v.Type() == parser.ValueTypeVector {
 		vec := v.(Vector)
-		for i := range vec {
-			if vec[i].ShouldDropName {
-				vec[i].Metric = vec[i].Metric.DropMetricName()
+		if vec.ShouldDropName {
+			for i := range vec.Samples {
+				if vec.ShouldDropName {
+					vec.Samples[i].Metric = vec.Samples[i].Metric.DropMetricName()
+				}
 			}
 		}
 		if vec.ContainsSameLabelset() {

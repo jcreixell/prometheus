@@ -75,18 +75,22 @@ func TestTemplateExpansion(t *testing.T) {
 			output: "1 2",
 		},
 		{
-			text:        "{{ query \"1.5\" | first | value }}",
-			output:      "1.5",
-			queryResult: promql.Vector{{T: 0, F: 1.5}},
+			text:   "{{ query \"1.5\" | first | value }}",
+			output: "1.5",
+			queryResult: promql.Vector{
+				Samples: []promql.Sample{{T: 0, F: 1.5}},
+			},
 		},
 		{
 			// Get value from query.
 			text: "{{ query \"metric{instance='a'}\" | first | value }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "11",
@@ -95,10 +99,12 @@ func TestTemplateExpansion(t *testing.T) {
 			// Get value of a native histogram from query.
 			text: "{{ query \"metric{instance='a'}\" | first | value }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					H:      &histogram.FloatHistogram{Count: 3, Sum: 10},
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						H:      &histogram.FloatHistogram{Count: 3, Sum: 10},
+					},
 				},
 			},
 			output: (&histogram.FloatHistogram{Count: 3, Sum: 10}).String(),
@@ -108,10 +114,12 @@ func TestTemplateExpansion(t *testing.T) {
 			text: "{{ query \"metric{instance='a'}\" | first | label \"instance\" }}",
 
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "a",
@@ -120,10 +128,12 @@ func TestTemplateExpansion(t *testing.T) {
 			// Get label "__value__" from query.
 			text: "{{ query \"metric{__value__='a'}\" | first | strvalue }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "__value__", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "__value__", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "a",
@@ -132,10 +142,12 @@ func TestTemplateExpansion(t *testing.T) {
 			// Missing label is empty when using label function.
 			text: "{{ query \"metric{instance='a'}\" | first | label \"foo\" }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "",
@@ -144,10 +156,12 @@ func TestTemplateExpansion(t *testing.T) {
 			// Missing label is empty when not using label function.
 			text: "{{ $x := query \"metric\" | first }}{{ $x.Labels.foo }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "",
@@ -155,10 +169,12 @@ func TestTemplateExpansion(t *testing.T) {
 		{
 			text: "{{ $x := query \"metric\" | first }}{{ $x.Labels.foo }}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "",
@@ -168,14 +184,16 @@ func TestTemplateExpansion(t *testing.T) {
 			// Range over query and sort by label.
 			text: "{{ range query \"metric\" | sortByLabel \"instance\" }}{{.Labels.instance}}:{{.Value}}: {{end}}",
 			queryResult: promql.Vector{
-				{
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "b"),
-					T:      0,
-					F:      21,
-				}, {
-					Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
-					T:      0,
-					F:      11,
+				Samples: []promql.Sample{
+					promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "b"),
+						T:      0,
+						F:      21,
+					}, promql.Sample{
+						Metric: labels.FromStrings(labels.MetricName, "metric", "instance", "a"),
+						T:      0,
+						F:      11,
+					},
 				},
 			},
 			output: "a:11: b:21: ",

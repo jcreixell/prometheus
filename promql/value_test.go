@@ -33,29 +33,35 @@ func TestVector_ContainsSameLabelset(t *testing.T) {
 		},
 		"vector with one series": {
 			vector: promql.Vector{
-				{Metric: labels.FromStrings("lbl", "a")},
+				Samples: []promql.Sample{{Metric: labels.FromStrings("lbl", "a")}},
 			},
 			expected: false,
 		},
 		"vector with two different series": {
 			vector: promql.Vector{
-				{Metric: labels.FromStrings("lbl", "a")},
-				{Metric: labels.FromStrings("lbl", "b")},
+				Samples: []promql.Sample{
+					{Metric: labels.FromStrings("lbl", "a")},
+					{Metric: labels.FromStrings("lbl", "b")},
+				},
 			},
 			expected: false,
 		},
 		"vector with two equal series": {
 			vector: promql.Vector{
-				{Metric: labels.FromStrings("lbl", "a")},
-				{Metric: labels.FromStrings("lbl", "a")},
+				Samples: []promql.Sample{
+					{Metric: labels.FromStrings("lbl", "a")},
+					{Metric: labels.FromStrings("lbl", "a")},
+				},
 			},
 			expected: true,
 		},
 		"vector with three series, two equal": {
 			vector: promql.Vector{
-				{Metric: labels.FromStrings("lbl", "a")},
-				{Metric: labels.FromStrings("lbl", "b")},
-				{Metric: labels.FromStrings("lbl", "a")},
+				Samples: []promql.Sample{
+					{Metric: labels.FromStrings("lbl", "a")},
+					{Metric: labels.FromStrings("lbl", "b")},
+					{Metric: labels.FromStrings("lbl", "a")},
+				},
 			},
 			expected: true,
 		},

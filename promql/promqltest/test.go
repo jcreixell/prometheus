@@ -778,7 +778,7 @@ func (ev *evalCmd) compareResult(result parser.Value) error {
 
 	case promql.Vector:
 		seen := map[uint64]bool{}
-		for pos, v := range val {
+		for pos, v := range val.Samples {
 			fp := v.Metric.Hash()
 			if _, ok := ev.metrics[fp]; !ok {
 				if v.H != nil {
@@ -1090,24 +1090,30 @@ func (t *test) runInstantQuery(iq atModifierTestCase, cmd *evalCmd, engine promq
 		return err
 	}
 
-	vec := make(promql.Vector, 0, len(mat))
+	vec := promql.Vector{
+		Samples: make([]promql.Sample, 0, len(mat)),
+	}
 	for _, series := range mat {
 		// We expect either Floats or Histograms.
 		for _, point := range series.Floats {
 			if point.T == timeMilliseconds(iq.evalTime) {
-				vec = append(vec, promql.Sample{Metric: series.Metric, T: point.T, F: point.F})
+				vec = promql.Vector{
+					Samples: append(vec.Samples, promql.Sample{Metric: series.Metric, T: point.T, F: point.F}),
+				}
 				break
 			}
 		}
 		for _, point := range series.Histograms {
 			if point.T == timeMilliseconds(iq.evalTime) {
-				vec = append(vec, promql.Sample{Metric: series.Metric, T: point.T, H: point.H})
+				vec = promql.Vector{
+					Samples: append(vec.Samples, promql.Sample{Metric: series.Metric, T: point.T, H: point.H}),
+				}
 				break
 			}
 		}
 	}
 	if _, ok := res.Value.(promql.Scalar); ok {
-		err = cmd.compareResult(promql.Scalar{V: vec[0].F})
+		err = cmd.compareResult(promql.Scalar{V: vec.Samples[0].F})
 	} else {
 		err = cmd.compareResult(vec)
 	}

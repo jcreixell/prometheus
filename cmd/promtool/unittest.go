@@ -410,7 +410,7 @@ Outer:
 		}
 
 		var gotSamples []parsedSample
-		for _, s := range got {
+		for _, s := range got.Samples {
 			gotSamples = append(gotSamples, parsedSample{
 				Labels:    s.Metric.Copy(),
 				Value:     s.F,
@@ -518,23 +518,24 @@ func (tg *testGroup) maxEvalTime() time.Duration {
 func query(ctx context.Context, qs string, t time.Time, engine *promql.Engine, qu storage.Queryable) (promql.Vector, error) {
 	q, err := engine.NewInstantQuery(ctx, qu, nil, qs, t)
 	if err != nil {
-		return nil, err
+		return promql.Vector{Samples: nil}, err
 	}
 	res := q.Exec(ctx)
 	if res.Err != nil {
-		return nil, res.Err
+		return promql.Vector{Samples: nil}, res.Err
 	}
 	switch v := res.Value.(type) {
 	case promql.Vector:
 		return v, nil
 	case promql.Scalar:
-		return promql.Vector{promql.Sample{
-			T:      v.T,
-			F:      v.V,
-			Metric: labels.Labels{},
-		}}, nil
+		return promql.Vector{
+			Samples: []promql.Sample{{
+				T:      v.T,
+				F:      v.V,
+				Metric: labels.Labels{},
+			}}}, nil
 	default:
-		return nil, errors.New("rule result is not a vector or scalar")
+		return promql.Vector{Samples: nil}, errors.New("rule result is not a vector or scalar")
 	}
 }
 

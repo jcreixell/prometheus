@@ -241,9 +241,9 @@ func labelsIsEmpty(ptr unsafe.Pointer) bool {
 func unsafeMarshalVectorJSON(ptr unsafe.Pointer, stream *jsoniter.Stream) {
 	v := *((*promql.Vector)(ptr))
 	stream.WriteArrayStart()
-	for i, s := range v {
+	for i, s := range v.Samples {
 		marshalSampleJSON(s, stream)
-		if i != len(v)-1 {
+		if i != len(v.Samples)-1 {
 			stream.WriteMore()
 		}
 	}

@@ -32,7 +32,7 @@ type unknownRule struct{}
 func (u unknownRule) Name() string          { return "" }
 func (u unknownRule) Labels() labels.Labels { return labels.EmptyLabels() }
 func (u unknownRule) Eval(context.Context, time.Duration, time.Time, QueryFunc, *url.URL, int) (promql.Vector, error) {
-	return nil, nil
+	return promql.Vector{}, nil
 }
 func (u unknownRule) String() string                       { return "" }
 func (u unknownRule) Query() parser.Expr                   { return nil }

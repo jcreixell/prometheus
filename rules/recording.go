@@ -81,14 +81,14 @@ func (rule *RecordingRule) Eval(ctx context.Context, queryOffset time.Duration, 
 	ctx = NewOriginContext(ctx, NewRuleDetail(rule))
 	vector, err := query(ctx, rule.vector.String(), ts.Add(-queryOffset))
 	if err != nil {
-		return nil, err
+		return promql.Vector{}, err
 	}
 
 	// Override the metric name and labels.
 	lb := labels.NewBuilder(labels.EmptyLabels())
 
-	for i := range vector {
-		sample := &vector[i]
+	for i := range vector.Samples {
+		sample := &vector.Samples[i]
 
 		lb.Reset(sample.Metric)
 		lb.Set(labels.MetricName, rule.name)
@@ -103,12 +103,12 @@ func (rule *RecordingRule) Eval(ctx context.Context, queryOffset time.Duration, 
 	// Check that the rule does not produce identical metrics after applying
 	// labels.
 	if vector.ContainsSameLabelset() {
-		return nil, fmt.Errorf("vector contains metrics with the same labelset after applying rule labels")
+		return promql.Vector{}, fmt.Errorf("vector contains metrics with the same labelset after applying rule labels")
 	}
 
-	numSeries := len(vector)
+	numSeries := len(vector.Samples)
 	if limit > 0 && numSeries > limit {
-		return nil, fmt.Errorf("exceeded limit of %d with %d series", limit, numSeries)
+		return promql.Vector{}, fmt.Errorf("exceeded limit of %d with %d series", limit, numSeries)
 	}
 
 	rule.SetHealth(HealthGood)

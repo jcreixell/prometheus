@@ -47,23 +47,25 @@ func EngineQueryFunc(engine promql.QueryEngine, q storage.Queryable) QueryFunc {
 	return func(ctx context.Context, qs string, t time.Time) (promql.Vector, error) {
 		q, err := engine.NewInstantQuery(ctx, q, nil, qs, t)
 		if err != nil {
-			return nil, err
+			return promql.Vector{}, err
 		}
 		res := q.Exec(ctx)
 		if res.Err != nil {
-			return nil, res.Err
+			return promql.Vector{}, res.Err
 		}
 		switch v := res.Value.(type) {
 		case promql.Vector:
 			return v, nil
 		case promql.Scalar:
-			return promql.Vector{promql.Sample{
-				T:      v.T,
-				F:      v.V,
-				Metric: labels.Labels{},
-			}}, nil
+			return promql.Vector{
+				Samples: []promql.Sample{promql.Sample{
+					T:      v.T,
+					F:      v.V,
+					Metric: labels.Labels{},
+				},
+				}}, nil
 		default:
-			return nil, errors.New("rule result is not a vector or scalar")
+			return promql.Vector{}, errors.New("rule result is not a vector or scalar")
 		}
 	}
 }

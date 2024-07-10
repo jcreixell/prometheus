@@ -107,7 +107,9 @@ func TestAlertingRuleTemplateWithHistogram(t *testing.T) {
 	}
 
 	q := func(ctx context.Context, qs string, t time.Time) (promql.Vector, error) {
-		return []promql.Sample{{H: &h}}, nil
+		return promql.Vector{
+			Samples: []promql.Sample{{H: &h}},
+		}, nil
 	}
 
 	expr, err := parser.ParseExpr("foo")
@@ -126,8 +128,8 @@ func TestAlertingRuleTemplateWithHistogram(t *testing.T) {
 	res, err := rule.Eval(context.TODO(), 0, evalTime, q, nil, 0)
 	require.NoError(t, err)
 
-	require.Len(t, res, 2)
-	for _, smpl := range res {
+	require.Len(t, res.Samples, 2)
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
 			result := promql.Sample{
@@ -170,9 +172,9 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 		labels.EmptyLabels(), labels.EmptyLabels(), "", true, nil,
 	)
 
-	results := []promql.Vector{
-		{
-			promql.Sample{
+	results := []promql.Vector{{
+		Samples: []promql.Sample{
+			{
 				Metric: labels.FromStrings(
 					"__name__", "ALERTS",
 					"alertname", "HTTPRequestRateLow",
@@ -184,8 +186,9 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 				F: 1,
 			},
 		},
+	},
 		{
-			promql.Sample{
+			Samples: []promql.Sample{{
 				Metric: labels.FromStrings(
 					"__name__", "ALERTS",
 					"alertname", "HTTPRequestRateLow",
@@ -196,9 +199,10 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 				),
 				F: 1,
 			},
+			},
 		},
 		{
-			promql.Sample{
+			Samples: []promql.Sample{{
 				Metric: labels.FromStrings(
 					"__name__", "ALERTS",
 					"alertname", "HTTPRequestRateLow",
@@ -209,9 +213,10 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 				),
 				F: 1,
 			},
+			},
 		},
 		{
-			promql.Sample{
+			Samples: []promql.Sample{{
 				Metric: labels.FromStrings(
 					"__name__", "ALERTS",
 					"alertname", "HTTPRequestRateLow",
@@ -222,6 +227,7 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 				),
 				F: 1,
 			},
+			},
 		},
 	}
 
@@ -229,15 +235,15 @@ func TestAlertingRuleLabelsUpdate(t *testing.T) {
 	for i, result := range results {
 		t.Logf("case %d", i)
 		evalTime := baseTime.Add(time.Duration(i) * time.Minute)
-		result[0].T = timestamp.FromTime(evalTime)
+		result.Samples[0].T = timestamp.FromTime(evalTime)
 		res, err := rule.Eval(context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0)
 		require.NoError(t, err)
 
 		var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
-		for _, smpl := range res {
+		for _, smpl := range res.Samples {
 			smplName := smpl.Metric.Get("__name__")
 			if smplName == "ALERTS" {
-				filteredRes = append(filteredRes, smpl)
+				filteredRes.Samples = append(filteredRes.Samples, smpl)
 			} else {
 				// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 				require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -285,43 +291,45 @@ func TestAlertingRuleExternalLabelsInTemplate(t *testing.T) {
 		true, log.NewNopLogger(),
 	)
 	result := promql.Vector{
-		promql.Sample{
-			Metric: labels.FromStrings(
-				"__name__", "ALERTS",
-				"alertname", "ExternalLabelDoesNotExist",
-				"alertstate", "pending",
-				"instance", "0",
-				"job", "app-server",
-				"templated_label", "There are 0 external Labels, of which foo is .",
-			),
-			F: 1,
-		},
-		promql.Sample{
-			Metric: labels.FromStrings(
-				"__name__", "ALERTS",
-				"alertname", "ExternalLabelExists",
-				"alertstate", "pending",
-				"instance", "0",
-				"job", "app-server",
-				"templated_label", "There are 2 external Labels, of which foo is bar.",
-			),
-			F: 1,
+		Samples: []promql.Sample{
+			promql.Sample{
+				Metric: labels.FromStrings(
+					"__name__", "ALERTS",
+					"alertname", "ExternalLabelDoesNotExist",
+					"alertstate", "pending",
+					"instance", "0",
+					"job", "app-server",
+					"templated_label", "There are 0 external Labels, of which foo is .",
+				),
+				F: 1,
+			},
+			promql.Sample{
+				Metric: labels.FromStrings(
+					"__name__", "ALERTS",
+					"alertname", "ExternalLabelExists",
+					"alertstate", "pending",
+					"instance", "0",
+					"job", "app-server",
+					"templated_label", "There are 2 external Labels, of which foo is bar.",
+				),
+				F: 1,
+			},
 		},
 	}
 
 	evalTime := time.Unix(0, 0)
-	result[0].T = timestamp.FromTime(evalTime)
-	result[1].T = timestamp.FromTime(evalTime)
+	result.Samples[0].T = timestamp.FromTime(evalTime)
+	result.Samples[1].T = timestamp.FromTime(evalTime)
 
 	var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
 	res, err := ruleWithoutExternalLabels.Eval(
 		context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0,
 	)
 	require.NoError(t, err)
-	for _, smpl := range res {
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
-			filteredRes = append(filteredRes, smpl)
+			filteredRes.Samples = append(filteredRes.Samples, smpl)
 		} else {
 			// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 			require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -332,10 +340,10 @@ func TestAlertingRuleExternalLabelsInTemplate(t *testing.T) {
 		context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0,
 	)
 	require.NoError(t, err)
-	for _, smpl := range res {
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
-			filteredRes = append(filteredRes, smpl)
+			filteredRes.Samples = append(filteredRes.Samples, smpl)
 		} else {
 			// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 			require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -378,43 +386,45 @@ func TestAlertingRuleExternalURLInTemplate(t *testing.T) {
 		true, log.NewNopLogger(),
 	)
 	result := promql.Vector{
-		promql.Sample{
-			Metric: labels.FromStrings(
-				"__name__", "ALERTS",
-				"alertname", "ExternalURLDoesNotExist",
-				"alertstate", "pending",
-				"instance", "0",
-				"job", "app-server",
-				"templated_label", "The external URL is .",
-			),
-			F: 1,
-		},
-		promql.Sample{
-			Metric: labels.FromStrings(
-				"__name__", "ALERTS",
-				"alertname", "ExternalURLExists",
-				"alertstate", "pending",
-				"instance", "0",
-				"job", "app-server",
-				"templated_label", "The external URL is http://localhost:1234.",
-			),
-			F: 1,
+		Samples: []promql.Sample{
+			promql.Sample{
+				Metric: labels.FromStrings(
+					"__name__", "ALERTS",
+					"alertname", "ExternalURLDoesNotExist",
+					"alertstate", "pending",
+					"instance", "0",
+					"job", "app-server",
+					"templated_label", "The external URL is .",
+				),
+				F: 1,
+			},
+			promql.Sample{
+				Metric: labels.FromStrings(
+					"__name__", "ALERTS",
+					"alertname", "ExternalURLExists",
+					"alertstate", "pending",
+					"instance", "0",
+					"job", "app-server",
+					"templated_label", "The external URL is http://localhost:1234.",
+				),
+				F: 1,
+			},
 		},
 	}
 
 	evalTime := time.Unix(0, 0)
-	result[0].T = timestamp.FromTime(evalTime)
-	result[1].T = timestamp.FromTime(evalTime)
+	result.Samples[0].T = timestamp.FromTime(evalTime)
+	result.Samples[1].T = timestamp.FromTime(evalTime)
 
 	var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
 	res, err := ruleWithoutExternalURL.Eval(
 		context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0,
 	)
 	require.NoError(t, err)
-	for _, smpl := range res {
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
-			filteredRes = append(filteredRes, smpl)
+			filteredRes.Samples = append(filteredRes.Samples, smpl)
 		} else {
 			// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 			require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -425,10 +435,10 @@ func TestAlertingRuleExternalURLInTemplate(t *testing.T) {
 		context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0,
 	)
 	require.NoError(t, err)
-	for _, smpl := range res {
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
-			filteredRes = append(filteredRes, smpl)
+			filteredRes.Samples = append(filteredRes.Samples, smpl)
 		} else {
 			// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 			require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -460,30 +470,32 @@ func TestAlertingRuleEmptyLabelFromTemplate(t *testing.T) {
 		true, log.NewNopLogger(),
 	)
 	result := promql.Vector{
-		promql.Sample{
-			Metric: labels.FromStrings(
-				"__name__", "ALERTS",
-				"alertname", "EmptyLabel",
-				"alertstate", "pending",
-				"instance", "0",
-				"job", "app-server",
-			),
-			F: 1,
+		Samples: []promql.Sample{
+			promql.Sample{
+				Metric: labels.FromStrings(
+					"__name__", "ALERTS",
+					"alertname", "EmptyLabel",
+					"alertstate", "pending",
+					"instance", "0",
+					"job", "app-server",
+				),
+				F: 1,
+			},
 		},
 	}
 
 	evalTime := time.Unix(0, 0)
-	result[0].T = timestamp.FromTime(evalTime)
+	result.Samples[0].T = timestamp.FromTime(evalTime)
 
 	var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
 	res, err := rule.Eval(
 		context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0,
 	)
 	require.NoError(t, err)
-	for _, smpl := range res {
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
-			filteredRes = append(filteredRes, smpl)
+			filteredRes.Samples = append(filteredRes.Samples, smpl)
 		} else {
 			// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 			require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -803,65 +815,75 @@ func TestKeepFiringFor(t *testing.T) {
 	)
 
 	results := []promql.Vector{
-		{
-			promql.Sample{
-				Metric: labels.FromStrings(
-					"__name__", "ALERTS",
-					"alertname", "HTTPRequestRateHigh",
-					"alertstate", "pending",
-					"instance", "0",
-					"job", "app-server",
-				),
-				F: 1,
+		promql.Vector{
+			Samples: []promql.Sample{
+				promql.Sample{
+					Metric: labels.FromStrings(
+						"__name__", "ALERTS",
+						"alertname", "HTTPRequestRateHigh",
+						"alertstate", "pending",
+						"instance", "0",
+						"job", "app-server",
+					),
+					F: 1,
+				},
 			},
 		},
-		{
-			promql.Sample{
-				Metric: labels.FromStrings(
-					"__name__", "ALERTS",
-					"alertname", "HTTPRequestRateHigh",
-					"alertstate", "firing",
-					"instance", "0",
-					"job", "app-server",
-				),
-				F: 1,
+		promql.Vector{
+			Samples: []promql.Sample{
+				promql.Sample{
+					Metric: labels.FromStrings(
+						"__name__", "ALERTS",
+						"alertname", "HTTPRequestRateHigh",
+						"alertstate", "firing",
+						"instance", "0",
+						"job", "app-server",
+					),
+					F: 1,
+				},
 			},
 		},
-		{
-			promql.Sample{
-				Metric: labels.FromStrings(
-					"__name__", "ALERTS",
-					"alertname", "HTTPRequestRateHigh",
-					"alertstate", "firing",
-					"instance", "0",
-					"job", "app-server",
-				),
-				F: 1,
+		promql.Vector{
+			Samples: []promql.Sample{
+				promql.Sample{
+					Metric: labels.FromStrings(
+						"__name__", "ALERTS",
+						"alertname", "HTTPRequestRateHigh",
+						"alertstate", "firing",
+						"instance", "0",
+						"job", "app-server",
+					),
+					F: 1,
+				},
 			},
 		},
-		{
-			promql.Sample{
-				Metric: labels.FromStrings(
-					"__name__", "ALERTS",
-					"alertname", "HTTPRequestRateHigh",
-					"alertstate", "firing",
-					"instance", "0",
-					"job", "app-server",
-				),
-				F: 1,
+		promql.Vector{
+			Samples: []promql.Sample{
+				promql.Sample{
+					Metric: labels.FromStrings(
+						"__name__", "ALERTS",
+						"alertname", "HTTPRequestRateHigh",
+						"alertstate", "firing",
+						"instance", "0",
+						"job", "app-server",
+					),
+					F: 1,
+				},
 			},
 		},
 		// From now on the alert should keep firing.
-		{
-			promql.Sample{
-				Metric: labels.FromStrings(
-					"__name__", "ALERTS",
-					"alertname", "HTTPRequestRateHigh",
-					"alertstate", "firing",
-					"instance", "0",
-					"job", "app-server",
-				),
-				F: 1,
+		promql.Vector{
+			Samples: []promql.Sample{
+				promql.Sample{
+					Metric: labels.FromStrings(
+						"__name__", "ALERTS",
+						"alertname", "HTTPRequestRateHigh",
+						"alertstate", "firing",
+						"instance", "0",
+						"job", "app-server",
+					),
+					F: 1,
+				},
 			},
 		},
 	}
@@ -870,15 +892,15 @@ func TestKeepFiringFor(t *testing.T) {
 	for i, result := range results {
 		t.Logf("case %d", i)
 		evalTime := baseTime.Add(time.Duration(i) * time.Minute)
-		result[0].T = timestamp.FromTime(evalTime)
+		result.Samples[0].T = timestamp.FromTime(evalTime)
 		res, err := rule.Eval(context.TODO(), 0, evalTime, EngineQueryFunc(testEngine, storage), nil, 0)
 		require.NoError(t, err)
 
 		var filteredRes promql.Vector // After removing 'ALERTS_FOR_STATE' samples.
-		for _, smpl := range res {
+		for _, smpl := range res.Samples {
 			smplName := smpl.Metric.Get("__name__")
 			if smplName == "ALERTS" {
-				filteredRes = append(filteredRes, smpl)
+				filteredRes.Samples = append(filteredRes.Samples, smpl)
 			} else {
 				// If not 'ALERTS', it has to be 'ALERTS_FOR_STATE'.
 				require.Equal(t, "ALERTS_FOR_STATE", smplName)
@@ -928,8 +950,8 @@ func TestPendingAndKeepFiringFor(t *testing.T) {
 	res, err := rule.Eval(context.TODO(), 0, baseTime, EngineQueryFunc(testEngine, storage), nil, 0)
 	require.NoError(t, err)
 
-	require.Len(t, res, 2)
-	for _, smpl := range res {
+	require.Len(t, res.Samples, 2)
+	for _, smpl := range res.Samples {
 		smplName := smpl.Metric.Get("__name__")
 		if smplName == "ALERTS" {
 			testutil.RequireEqual(t, result, smpl)
@@ -976,7 +998,7 @@ func TestAlertingEvalWithOrigin(t *testing.T) {
 
 	_, err = rule.Eval(ctx, 0, now, func(ctx context.Context, qs string, _ time.Time) (promql.Vector, error) {
 		detail = FromOriginContext(ctx)
-		return nil, nil
+		return promql.Vector{}, nil
 	}, nil, 0)
 
 	require.NoError(t, err)

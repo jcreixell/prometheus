@@ -342,7 +342,7 @@ func (r *AlertingRule) Eval(ctx context.Context, queryOffset time.Duration, ts t
 	ctx = NewOriginContext(ctx, NewRuleDetail(r))
 	res, err := query(ctx, r.vector.String(), ts.Add(-queryOffset))
 	if err != nil {
-		return nil, err
+		return promql.Vector{}, err
 	}
 
 	// Create pending alerts for any new vector elements in the alert expression
@@ -352,8 +352,8 @@ func (r *AlertingRule) Eval(ctx context.Context, queryOffset time.Duration, ts t
 	lb := labels.NewBuilder(labels.EmptyLabels())
 	sb := labels.NewScratchBuilder(0)
 	var vec promql.Vector
-	alerts := make(map[uint64]*Alert, len(res))
-	for _, smpl := range res {
+	alerts := make(map[uint64]*Alert, len(res.Samples))
+	for _, smpl := range res.Samples {
 		// Provide the alert information to the template.
 		l := smpl.Metric.Map()
 
@@ -404,7 +404,7 @@ func (r *AlertingRule) Eval(ctx context.Context, queryOffset time.Duration, ts t
 		resultFPs[h] = struct{}{}
 
 		if _, ok := alerts[h]; ok {
-			return nil, fmt.Errorf("vector contains metrics with the same labelset after applying alert labels")
+			return promql.Vector{}, fmt.Errorf("vector contains metrics with the same labelset after applying alert labels")
 		}
 
 		alerts[h] = &Alert{
@@ -483,14 +483,14 @@ func (r *AlertingRule) Eval(ctx context.Context, queryOffset time.Duration, ts t
 		}
 
 		if r.restored.Load() {
-			vec = append(vec, r.sample(a, ts.Add(-queryOffset)))
-			vec = append(vec, r.forStateSample(a, ts.Add(-queryOffset), float64(a.ActiveAt.Unix())))
+			vec.Samples = append(vec.Samples, r.sample(a, ts.Add(-queryOffset)))
+			vec.Samples = append(vec.Samples, r.forStateSample(a, ts.Add(-queryOffset), float64(a.ActiveAt.Unix())))
 		}
 	}
 
 	if limit > 0 && numActivePending > limit {
 		r.active = map[uint64]*Alert{}
-		return nil, fmt.Errorf("exceeded limit of %d with %d alerts", limit, numActivePending)
+		return promql.Vector{}, fmt.Errorf("exceeded limit of %d with %d alerts", limit, numActivePending)
 	}
 
 	return vec, nil

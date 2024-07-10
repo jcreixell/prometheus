@@ -194,8 +194,7 @@ type Sample struct {
 	F float64
 	H *histogram.FloatHistogram
 
-	Metric         labels.Labels
-	ShouldDropName bool
+	Metric labels.Labels
 }
 
 func (s Sample) String() string {
@@ -233,13 +232,16 @@ func (s Sample) MarshalJSON() ([]byte, error) {
 	return json.Marshal(h)
 }
 
-// Vector is basically only an alias for []Sample, but the contract is that
-// in a Vector, all Samples have the same timestamp.
-type Vector []Sample
+// Vector contains a list of samples.
+// In a Vector, all Samples have the same timestamp.
+type Vector struct {
+	Samples        []Sample
+	ShouldDropName bool
+}
 
 func (vec Vector) String() string {
-	entries := make([]string, len(vec))
-	for i, s := range vec {
+	entries := make([]string, len(vec.Samples))
+	for i, s := range vec.Samples {
 		entries[i] = s.String()
 	}
 	return strings.Join(entries, "\n")
@@ -251,7 +253,7 @@ func (vec Vector) String() string {
 // See HPoint.size for details.
 func (vec Vector) TotalSamples() int {
 	numSamples := 0
-	for _, sample := range vec {
+	for _, sample := range vec.Samples {
 		numSamples++
 		if sample.H != nil {
 			numSamples += sample.H.Size() / 16
@@ -264,14 +266,14 @@ func (vec Vector) TotalSamples() int {
 // Such a behavior is semantically undefined
 // https://github.com/prometheus/prometheus/issues/4562
 func (vec Vector) ContainsSameLabelset() bool {
-	switch len(vec) {
+	switch len(vec.Samples) {
 	case 0, 1:
 		return false
 	case 2:
-		return vec[0].Metric.Hash() == vec[1].Metric.Hash()
+		return vec.Samples[0].Metric.Hash() == vec.Samples[1].Metric.Hash()
 	default:
-		l := make(map[uint64]struct{}, len(vec))
-		for _, ss := range vec {
+		l := make(map[uint64]struct{}, len(vec.Samples))
+		for _, ss := range vec.Samples {
 			hash := ss.Metric.Hash()
 			if _, ok := l[hash]; ok {
 				return true
@@ -347,11 +349,11 @@ type Result struct {
 // the result was an error or the result value is not a Vector.
 func (r *Result) Vector() (Vector, error) {
 	if r.Err != nil {
-		return nil, r.Err
+		return Vector{Samples: nil}, r.Err
 	}
 	v, ok := r.Value.(Vector)
 	if !ok {
-		return nil, errors.New("query result is not a Vector")
+		return Vector{Samples: nil}, errors.New("query result is not a Vector")
 	}
 	return v, nil
 }

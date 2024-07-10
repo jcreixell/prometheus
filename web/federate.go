@@ -91,7 +91,9 @@ func (h *Handler) federation(w http.ResponseWriter, req *http.Request) {
 	}
 	defer q.Close()
 
-	vec := make(promql.Vector, 0, 8000)
+	vec := promql.Vector{
+		Samples: make([]promql.Sample, 0, 8000),
+	}
 
 	hints := &storage.SelectHints{Start: mint, End: maxt}
 
@@ -149,7 +151,7 @@ Loop:
 			continue
 		}
 
-		vec = append(vec, promql.Sample{
+		vec.Samples = append(vec.Samples, promql.Sample{
 			Metric: s.Labels(),
 			T:      t,
 			F:      f,
@@ -166,7 +168,7 @@ Loop:
 		return
 	}
 
-	slices.SortFunc(vec, func(a, b promql.Sample) int {
+	slices.SortFunc(vec.Samples, func(a, b promql.Sample) int {
 		ni := a.Metric.Get(labels.MetricName)
 		nj := b.Metric.Get(labels.MetricName)
 		return strings.Compare(ni, nj)
@@ -187,7 +189,7 @@ Loop:
 		lastWasHistogram, lastHistogramWasGauge bool
 		protMetricFam                           *dto.MetricFamily
 	)
-	for _, s := range vec {
+	for _, s := range vec.Samples {
 		isHistogram := s.H != nil
 		formatType := format.FormatType()
 		if isHistogram &&

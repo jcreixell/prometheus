@@ -348,14 +348,14 @@ func TestFederationWithNativeHistograms(t *testing.T) {
 		switch i {
 		case 0, 3:
 			_, err = app.Append(0, l, 100*60*1000, float64(i*100))
-			expVec = append(expVec, promql.Sample{
+			expVec.Samples = append(expVec.Samples, promql.Sample{
 				T:      100 * 60 * 1000,
 				F:      float64(i * 100),
 				Metric: expL,
 			})
 		case 4:
 			_, err = app.AppendHistogram(0, l, 100*60*1000, histWithoutZeroBucket.Copy(), nil)
-			expVec = append(expVec, promql.Sample{
+			expVec.Samples = append(expVec.Samples, promql.Sample{
 				T:      100 * 60 * 1000,
 				H:      histWithoutZeroBucket.ToFloat(nil),
 				Metric: expL,
@@ -364,7 +364,7 @@ func TestFederationWithNativeHistograms(t *testing.T) {
 			hist.ZeroCount++
 			hist.Count++
 			_, err = app.AppendHistogram(0, l, 100*60*1000, hist.Copy(), nil)
-			expVec = append(expVec, promql.Sample{
+			expVec.Samples = append(expVec.Samples, promql.Sample{
 				T:      100 * 60 * 1000,
 				H:      hist.ToFloat(nil),
 				Metric: expL,
@@ -411,14 +411,14 @@ func TestFederationWithNativeHistograms(t *testing.T) {
 		case textparse.EntryHistogram:
 			_, parsedTimestamp, h, fh := p.Histogram()
 			require.Nil(t, h)
-			actVec = append(actVec, promql.Sample{
+			actVec.Samples = append(actVec.Samples, promql.Sample{
 				T:      *parsedTimestamp,
 				H:      fh,
 				Metric: l,
 			})
 		case textparse.EntrySeries:
 			_, parsedTimestamp, f := p.Series()
-			actVec = append(actVec, promql.Sample{
+			actVec.Samples = append(actVec.Samples, promql.Sample{
 				T:      *parsedTimestamp,
 				F:      f,
 				Metric: l,

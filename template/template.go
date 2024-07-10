@@ -92,8 +92,8 @@ func query(ctx context.Context, q string, ts time.Time, queryFn QueryFunc) (quer
 	// promql.Vector is hard to work with in templates, so convert to
 	// base data types.
 	// TODO(fabxc): probably not true anymore after type rework.
-	result := make(queryResult, len(vector))
-	for n, v := range vector {
+	result := make(queryResult, len(vector.Samples))
+	for n, v := range vector.Samples {
 		s := sample{
 			Value:  v.F,
 			Labels: v.Metric.Map(),

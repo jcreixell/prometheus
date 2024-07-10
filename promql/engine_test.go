@@ -698,10 +698,12 @@ load 10s
 		{
 			Query: "metric",
 			Result: promql.Vector{
-				promql.Sample{
-					F:      1,
-					T:      1000,
-					Metric: labels.FromStrings("__name__", "metric"),
+				Samples: []promql.Sample{
+					{
+						F:      1,
+						T:      1000,
+						Metric: labels.FromStrings("__name__", "metric"),
+					},
 				},
 			},
 			Start: time.Unix(1, 0),
@@ -1563,13 +1565,17 @@ load 1ms
 			query: `metric_neg @ 0`,
 			start: 100,
 			result: promql.Vector{
-				promql.Sample{F: 1, T: 100000, Metric: lblsneg},
+				Samples: []promql.Sample{
+					promql.Sample{F: 1, T: 100000, Metric: lblsneg},
+				},
 			},
 		}, {
 			query: `metric_neg @ -200`,
 			start: 100,
 			result: promql.Vector{
-				promql.Sample{F: 201, T: 100000, Metric: lblsneg},
+				Samples: []promql.Sample{
+					promql.Sample{F: 201, T: 100000, Metric: lblsneg},
+				},
 			},
 		}, {
 			query: `metric{job="2"} @ 50`,
@@ -3122,15 +3128,17 @@ func TestDropMetricName(t *testing.T) {
 			expr: "{__name__!=\"\"}",
 			ts:   baseT,
 			expected: promql.Vector{
-				promql.Sample{
-					F:      1,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
-				},
-				promql.Sample{
-					F:      2,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+				Samples: []promql.Sample{
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
+					},
+					promql.Sample{
+						F:      2,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+					},
 				},
 			},
 		},
@@ -3158,51 +3166,55 @@ func TestDropMetricName(t *testing.T) {
 			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"$1\", \"__name__\", \"(.+)\")",
 			ts:   baseT,
 			expected: promql.Vector{
-				promql.Sample{
-					F:              1,
-					T:              0,
-					Metric:         labels.FromStrings("original_name", "some_metric", "env", "1"),
-					ShouldDropName: true,
+				Samples: []promql.Sample{
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("original_name", "some_metric", "env", "1"),
+					},
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("original_name", "some_other_metric", "env", "1"),
+					},
 				},
-				promql.Sample{
-					F:              1,
-					T:              0,
-					Metric:         labels.FromStrings("original_name", "some_other_metric", "env", "1"),
-					ShouldDropName: true,
-				},
+				ShouldDropName: true,
 			},
 		},
 		"allows relabeling using __name__ via label_join": {
 			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"original_name\", \"-\", \"__name__\", \"env\")",
 			ts:   baseT,
 			expected: promql.Vector{
-				promql.Sample{
-					F:              1,
-					T:              0,
-					Metric:         labels.FromStrings("original_name", "some_metric-1", "env", "1"),
-					ShouldDropName: true,
+				Samples: []promql.Sample{
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("original_name", "some_metric-1", "env", "1"),
+					},
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("original_name", "some_other_metric-1", "env", "1"),
+					},
 				},
-				promql.Sample{
-					F:              1,
-					T:              0,
-					Metric:         labels.FromStrings("original_name", "some_other_metric-1", "env", "1"),
-					ShouldDropName: true,
-				},
+				ShouldDropName: true,
 			},
 		},
 		"allows preserving __name__ via label_replace": {
 			expr: "label_replace(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"$1\", \"__name__\", \"(.+)\")",
 			ts:   baseT,
 			expected: promql.Vector{
-				promql.Sample{
-					F:      1,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
-				},
-				promql.Sample{
-					F:      1,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+				Samples: []promql.Sample{
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_metric", "env", "1"),
+					},
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_other_metric", "env", "1"),
+					},
 				},
 			},
 		},
@@ -3210,15 +3222,17 @@ func TestDropMetricName(t *testing.T) {
 			expr: "label_join(count_over_time({__name__!=\"\"}[1m]), \"__name__\", \"-\", \"__name__\", \"env\")",
 			ts:   baseT,
 			expected: promql.Vector{
-				promql.Sample{
-					F:      1,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_metric-1", "env", "1"),
-				},
-				promql.Sample{
-					F:      1,
-					T:      0,
-					Metric: labels.FromStrings("__name__", "some_other_metric-1", "env", "1"),
+				Samples: []promql.Sample{
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_metric-1", "env", "1"),
+					},
+					promql.Sample{
+						F:      1,
+						T:      0,
+						Metric: labels.FromStrings("__name__", "some_other_metric-1", "env", "1"),
+					},
 				},
 			},
 		},
@@ -3414,7 +3428,11 @@ func TestNativeHistogram_Sum_Count_Add_AvgOperator(t *testing.T) {
 
 				// sum().
 				queryString := fmt.Sprintf("sum(%s)", seriesName)
-				queryAndCheck(queryString, ts, []promql.Sample{{T: ts, H: &c.expected, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expected, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				queryString = `sum({idx="0"})`
 				var annos annotations.Annotations
@@ -3426,26 +3444,48 @@ func TestNativeHistogram_Sum_Count_Add_AvgOperator(t *testing.T) {
 				for idx := 1; idx < len(c.histograms); idx++ {
 					queryString += fmt.Sprintf(` + ignoring(idx) %s{idx="%d"}`, seriesName, idx)
 				}
-				queryAndCheck(queryString, ts, []promql.Sample{{T: ts, H: &c.expected, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expected, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// count().
 				queryString = fmt.Sprintf("count(%s)", seriesName)
-				queryAndCheck(queryString, ts, []promql.Sample{{T: ts, F: 4, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, F: 4, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// avg().
 				queryString = fmt.Sprintf("avg(%s)", seriesName)
-				queryAndCheck(queryString, ts, []promql.Sample{{T: ts, H: &c.expectedAvg, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedAvg, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				offset := int64(len(c.histograms) - 1)
 				newTs := ts + offset*int64(time.Minute/time.Millisecond)
 
 				// sum_over_time().
 				queryString = fmt.Sprintf("sum_over_time(%s[%dm:1m])", seriesNameOverTime, offset)
-				queryAndCheck(queryString, newTs, []promql.Sample{{T: newTs, H: &c.expected, Metric: labels.EmptyLabels(), ShouldDropName: true}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: newTs, H: &c.expected, Metric: labels.EmptyLabels()},
+					},
+					ShouldDropName: true,
+				})
 
 				// avg_over_time().
 				queryString = fmt.Sprintf("avg_over_time(%s[%dm:1m])", seriesNameOverTime, offset)
-				queryAndCheck(queryString, newTs, []promql.Sample{{T: newTs, H: &c.expectedAvg, Metric: labels.EmptyLabels(), ShouldDropName: true}})
+				queryAndCheck(queryString, ts, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: newTs, H: &c.expectedAvg, Metric: labels.EmptyLabels()},
+					},
+					ShouldDropName: true,
+				})
 			})
 			idx0++
 		}
@@ -3662,9 +3702,9 @@ func TestNativeHistogram_SubOperator(t *testing.T) {
 					vector, err := res.Vector()
 					require.NoError(t, err)
 
-					if len(vector) == len(exp) {
-						for i, e := range exp {
-							got := vector[i].H
+					if len(vector.Samples) == len(exp.Samples) {
+						for i, e := range exp.Samples {
+							got := vector.Samples[i].H
 							if got != e.H {
 								// Error messages are better if we compare structs, not pointers.
 								require.Equal(t, *e.H, *got)
@@ -3680,7 +3720,11 @@ func TestNativeHistogram_SubOperator(t *testing.T) {
 				for idx := 1; idx < len(c.histograms); idx++ {
 					queryString += fmt.Sprintf(` - ignoring(idx) %s{idx="%d"}`, seriesName, idx)
 				}
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expected, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expected, Metric: labels.EmptyLabels()},
+					},
+				})
 			})
 		}
 		idx0++
@@ -3825,27 +3869,51 @@ func TestNativeHistogram_MulDivOperator(t *testing.T) {
 
 				// histogram * scalar.
 				queryString := fmt.Sprintf(`%s * %f`, seriesName, c.scalar)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// scalar * histogram.
 				queryString = fmt.Sprintf(`%f * %s`, c.scalar, seriesName)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// histogram * float.
 				queryString = fmt.Sprintf(`%s * %s`, seriesName, floatSeriesName)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// float * histogram.
 				queryString = fmt.Sprintf(`%s * %s`, floatSeriesName, seriesName)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// histogram / scalar.
 				queryString = fmt.Sprintf(`%s / %f`, seriesName, c.scalar)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedDiv, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 
 				// histogram / float.
 				queryString = fmt.Sprintf(`%s / %s`, seriesName, floatSeriesName)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedDiv, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, promql.Vector{
+					Samples: []promql.Sample{
+						promql.Sample{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()},
+					},
+				})
 			})
 			idx0++
 		}
