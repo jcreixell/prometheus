@@ -31,6 +31,10 @@ eval instant at 15m rate(metric{env="1"}[10m])
 eval instant at 15m last_over_time(metric{env="1"}[10m])
 	metric{env="1"} 120
 
+# Drops name for other _over_time functions
+eval instant at 15m max_over_time(metric{env="1"}[10m])
+	{env="1"} 120
+
 # Allows relabeling (to-be-dropped) __name__  via label_replace
 eval instant at 15m label_replace(rate({env="1"}[10m]), "my_name", "rate_$1", "__name__", "(.+)")
 	{my_name="rate_metric", env="1"} 0.2

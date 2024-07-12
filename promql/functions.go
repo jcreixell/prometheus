@@ -169,7 +169,7 @@ func extrapolatedRate(vals []parser.Value, args parser.Expressions, enh *EvalNod
 		resultHistogram.Mul(factor)
 	}
 
-	return append(enh.Out, Sample{F: resultFloat, H: resultHistogram, ShouldDropName: samples.ShouldDropName}), annos
+	return append(enh.Out, Sample{F: resultFloat, H: resultHistogram}), annos
 }
 
 // histogramRate is a helper function for extrapolatedRate. It requires
@@ -529,14 +529,14 @@ func funcScalar(vals []parser.Value, args parser.Expressions, enh *EvalNodeHelpe
 func aggrOverTime(vals []parser.Value, enh *EvalNodeHelper, aggrFn func(Series) float64) Vector {
 	el := vals[0].(Matrix)[0]
 
-	return append(enh.Out, Sample{F: aggrFn(el), ShouldDropName: el.ShouldDropName})
+	return append(enh.Out, Sample{F: aggrFn(el)})
 }
 
 func aggrHistOverTime(vals []parser.Value, enh *EvalNodeHelper, aggrFn func(Series) (*histogram.FloatHistogram, error)) (Vector, error) {
 	el := vals[0].(Matrix)[0]
 	res, err := aggrFn(el)
 
-	return append(enh.Out, Sample{H: res, ShouldDropName: el.ShouldDropName}), err
+	return append(enh.Out, Sample{H: res}), err
 }
 
 // === avg_over_time(Matrix parser.ValueTypeMatrix) (Vector, Annotations)  ===
