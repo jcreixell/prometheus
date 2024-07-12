@@ -4,29 +4,32 @@ load 5m
 	another_metric{env="1"}	60 120 180
 
 # Does not drop __name__ for vector selector
-eval instant at 15m {__name__!=""}
+eval instant at 15m metric{env="1"}
 	metric{env="1"} 120
-	another_metric{env="1"} 180
 
-# Drops __name__ for instant-vector functions (leading to duplicate labelset errors)
-eval_fail instant at 15m clamp({env="1"}, 0, 100)
+# Drops __name__ for unary operators
+eval instant at 15m -metric
+	{env="1"} -120
 
-# Drops __name__ for range-vector functions (leading to duplicate labelset errors)
-eval_fail instant at 15m rate({env="1"}[10m])
+# Drops __name__ for binary operators
+eval instant at 15m metric + another_metric
+	{env="1"} 300
+
+# Drops __name__ for vector-scalar operations
+eval instant at 15m metric * 2
+	{env="1"} 240
+
+# Drops __name__ for instant-vector functions
+eval instant at 15m clamp(metric, 0, 100)
+	{env="1"} 100
+
+# Drops __name__ for range-vector functions
+eval instant at 15m rate(metric{env="1"}[10m])
+	{env="1"} 0.2
 
 # Does not drop __name__ for last_over_time function
-eval instant at 15m last_over_time({env="1"}[10m])
+eval instant at 15m last_over_time(metric{env="1"}[10m])
 	metric{env="1"} 120
-	another_metric{env="1"} 180
-
-# Drops __name__ for unary expressions (leading to duplicate labelset errors)
-eval_fail instant at 15m -{__name__!=""}
-
-# Drops __name__ for binary operations (leading to duplicate labelset errors)
-eval_fail instant at 15m {__name__!=""} + {__name__!=""}
-
-# Drops __name__ for vector-scalar operations (leading to duplicate labelset errors)
-eval_fail instant at 15m {__name__!=""} * 2
 
 # Allows relabeling (to-be-dropped) __name__  via label_replace
 eval instant at 15m label_replace(rate({env="1"}[10m]), "my_name", "rate_$1", "__name__", "(.+)")
@@ -52,13 +55,9 @@ eval instant at 15m label_join(rate({env="1"}[10m]), "__name__", "_", "__name__"
 # This is an accidental side effect of delayed __name__ label dropping
 eval_fail instant at 15m sum by (__name__) (rate({env="1"}[10m]))
 
-# Aggregation operators propagate __name__ label dropping information
-eval instant at 15m sum by (__name__, env) ({env="1"})
+# Aggregationk operators propagate __name__ label dropping information
+eval instant at 15m topk(10, sum by (__name__, env) (metric{env="1"}))
 	metric{env="1"} 120
-	another_metric{env="1"} 180
 
-eval instant at 15m topk(10, {env="1"})
-	metric{env="1"} 120
-	another_metric{env="1"} 180
-
-eval_fail instant at 15m topk(10, count_over_time({__name__!=""}[10m]))
+eval instant at 15m topk(10, sum by (__name__, env) (rate(metric{env="1"}[10m])))
+	{env="1"} 0.2
