@@ -55,6 +55,10 @@ eval instant at 15m label_join(rate({env="1"}[10m]), "__name__", "_", "__name__"
 	metric_1{env="1"} 0.2
 	another_metric_1{env="1"} 0.2
 
+# Does not drop metric names fro aggregation operators
+eval instant at 15m sum by (__name__, env) (metric{env="1"})
+	metric{env="1"} 120
+
 # Aggregation operators by __name__ lead to duplicate labelset errors (aggregation is partitioned by not yet removed __name__ label)
 # This is an accidental side effect of delayed __name__ label dropping
 eval_fail instant at 15m sum by (__name__) (rate({env="1"}[10m]))
