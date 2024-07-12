@@ -15,6 +15,14 @@ eval instant at 15m -metric
 eval instant at 15m metric + another_metric
 	{env="1"} 300
 
+# Does not drop __name__ for binary comparison operators
+eval instant at 15m metric <= another_metric
+	metric{env="1"} 120
+
+# Drops __name__ for binary comparison operators with "bool" modifier
+eval instant at 15m metric <= bool another_metric
+	{env="1"} 1
+
 # Drops __name__ for vector-scalar operations
 eval instant at 15m metric * 2
 	{env="1"} 240
