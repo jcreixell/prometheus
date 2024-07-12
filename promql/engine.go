@@ -1197,12 +1197,12 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 			for si, series := range matrixes[i] {
 				switch {
 				case len(series.Floats) > 0 && series.Floats[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts})
+					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts, ShouldDropName: series.ShouldDropName})
 					// Move input vectors forward so we don't have to re-scan the same
 					// past points at the next step.
 					matrixes[i][si].Floats = series.Floats[1:]
 				case len(series.Histograms) > 0 && series.Histograms[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts})
+					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts, ShouldDropName: series.ShouldDropName})
 					matrixes[i][si].Histograms = series.Histograms[1:]
 				default:
 					continue
@@ -1267,10 +1267,9 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 				}
 				ss.ts = ts
 			} else {
-				ss = seriesAndTimestamp{Series{Metric: sample.Metric}, ts}
+				ss = seriesAndTimestamp{Series{Metric: sample.Metric, ShouldDropName: sample.ShouldDropName}, ts}
 			}
 			addToSeries(&ss.Series, enh.Ts, sample.F, sample.H, numSteps)
-			ss.ShouldDropName = sample.ShouldDropName
 			seriess[h] = ss
 		}
 	}
@@ -2979,7 +2978,7 @@ func (ev *evaluator) aggregationK(e *parser.AggregateExpr, k int, inputMatrix Ma
 		if !ok {
 			continue
 		}
-		s = Sample{Metric: inputMatrix[si].Metric, F: f}
+		s = Sample{Metric: inputMatrix[si].Metric, F: f, ShouldDropName: inputMatrix[si].ShouldDropName}
 
 		group := &groups[seriesToResult[si]]
 		// Initialize this group if it's the first time we've seen it.
@@ -3040,7 +3039,7 @@ func (ev *evaluator) aggregationK(e *parser.AggregateExpr, k int, inputMatrix Ma
 			hash := lbls.Hash()
 			ss, ok := seriess[hash]
 			if !ok {
-				ss = Series{Metric: lbls}
+				ss = Series{Metric: lbls, ShouldDropName: shouldDropName}
 			}
 			addToSeries(&ss, enh.Ts, f, nil, numSteps)
 			seriess[hash] = ss

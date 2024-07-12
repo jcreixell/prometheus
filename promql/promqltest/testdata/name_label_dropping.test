@@ -8,8 +8,16 @@ eval instant at 15m {__name__!=""}
 	metric{env="1"} 120
 	another_metric{env="1"} 180
 
-# Drops __name__ for functions (leading to duplicate labelset errors)
+# Drops __name__ for instant-vector functions (leading to duplicate labelset errors)
+eval_fail instant at 15m clamp({env="1"}, 0, 100)
+
+# Drops __name__ for range-vector functions (leading to duplicate labelset errors)
 eval_fail instant at 15m rate({env="1"}[10m])
+
+# Does not drop __name__ for last_over_time function
+eval instant at 15m last_over_time({env="1"}[10m])
+	metric{env="1"} 120
+	another_metric{env="1"} 180
 
 # Drops __name__ for unary expressions (leading to duplicate labelset errors)
 eval_fail instant at 15m -{__name__!=""}
@@ -40,10 +48,17 @@ eval instant at 15m label_join(rate({env="1"}[10m]), "__name__", "_", "__name__"
 	metric_1{env="1"} 0.2
 	another_metric_1{env="1"} 0.2
 
-# Aggregations by __name__ lead to duplicate labelset errors due to not yet removed __name__ label
+# Aggregation operators by __name__ lead to duplicate labelset errors (aggregation is partitioned by not yet removed __name__ label)
+# This is an accidental side effect of delayed __name__ label dropping
 eval_fail instant at 15m sum by (__name__) (rate({env="1"}[10m]))
 
-# Other aggregations preserve __name__ label
+# Aggregation operators propagate __name__ label dropping information
 eval instant at 15m sum by (__name__, env) ({env="1"})
 	metric{env="1"} 120
 	another_metric{env="1"} 180
+
+eval instant at 15m topk(10, {env="1"})
+	metric{env="1"} 120
+	another_metric{env="1"} 180
+
+eval_fail instant at 15m topk(10, count_over_time({__name__!=""}[10m]))
