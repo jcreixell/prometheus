@@ -3685,11 +3685,11 @@ func TestNativeHistogram_MulDivOperator(t *testing.T) {
 
 				// histogram * scalar.
 				queryString := fmt.Sprintf(`%s * %f`, seriesName, c.scalar)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels(), ShouldDropName: true}})
 
 				// scalar * histogram.
 				queryString = fmt.Sprintf(`%f * %s`, c.scalar, seriesName)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedMul, Metric: labels.EmptyLabels(), ShouldDropName: true}})
 
 				// histogram * float.
 				queryString = fmt.Sprintf(`%s * %s`, seriesName, floatSeriesName)
@@ -3701,7 +3701,7 @@ func TestNativeHistogram_MulDivOperator(t *testing.T) {
 
 				// histogram / scalar.
 				queryString = fmt.Sprintf(`%s / %f`, seriesName, c.scalar)
-				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedDiv, Metric: labels.EmptyLabels()}})
+				queryAndCheck(queryString, []promql.Sample{{T: ts, H: &c.expectedDiv, Metric: labels.EmptyLabels(), ShouldDropName: true}})
 
 				// histogram / float.
 				queryString = fmt.Sprintf(`%s / %s`, seriesName, floatSeriesName)

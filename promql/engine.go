@@ -2657,7 +2657,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			lhsSample.F = float
 			lhsSample.H = histogram
 			if shouldDropMetricName(op) || returnBool {
-				lhsSample.Metric = lhsSample.Metric.DropMetricName()
+				lhsSample.ShouldDropName = true
 			}
 			enh.Out = append(enh.Out, lhsSample)
 		}
