@@ -3125,7 +3125,7 @@ seriesLoop:
 
 		case parser.LIMITK, parser.LIMIT_RATIO:
 			for _, v := range aggr.heap {
-				add(v.Metric, v.F)
+				add(v.Metric, v.F, v.ShouldDropName)
 			}
 		}
 	}
