@@ -743,9 +743,9 @@ func (ng *Engine) execEvalStmt(ctx context.Context, query *query, s *parser.Eval
 				// Point might have a different timestamp, force it to the evaluation
 				// timestamp as that is when we ran the evaluation.
 				if len(s.Histograms) > 0 {
-					vector[i] = Sample{Metric: s.Metric, H: s.Histograms[0].H, T: start}
+					vector[i] = Sample{Metric: s.Metric, H: s.Histograms[0].H, T: start, ShouldDropName: s.ShouldDropName}
 				} else {
-					vector[i] = Sample{Metric: s.Metric, F: s.Floats[0].F, T: start}
+					vector[i] = Sample{Metric: s.Metric, F: s.Floats[0].F, T: start, ShouldDropName: s.ShouldDropName}
 				}
 			}
 			return vector, warnings, nil
@@ -1073,6 +1073,7 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	defer ev.recover(expr, &ws, &err)
 
 	v, ws = ev.eval(expr)
+	ev.cleanupMetricLabels(v)
 	return v, ws, nil
 }
 
@@ -1196,12 +1197,12 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 			for si, series := range matrixes[i] {
 				switch {
 				case len(series.Floats) > 0 && series.Floats[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts})
+					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, F: series.Floats[0].F, T: ts, ShouldDropName: series.ShouldDropName})
 					// Move input vectors forward so we don't have to re-scan the same
 					// past points at the next step.
 					matrixes[i][si].Floats = series.Floats[1:]
 				case len(series.Histograms) > 0 && series.Histograms[0].T == ts:
-					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts})
+					vectors[i] = append(vectors[i], Sample{Metric: series.Metric, H: series.Histograms[0].H, T: ts, ShouldDropName: series.ShouldDropName})
 					matrixes[i][si].Histograms = series.Histograms[1:]
 				default:
 					continue
@@ -1246,9 +1247,9 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 			mat := make(Matrix, len(result))
 			for i, s := range result {
 				if s.H == nil {
-					mat[i] = Series{Metric: s.Metric, Floats: []FPoint{{T: ts, F: s.F}}}
+					mat[i] = Series{Metric: s.Metric, Floats: []FPoint{{T: ts, F: s.F}}, ShouldDropName: s.ShouldDropName}
 				} else {
-					mat[i] = Series{Metric: s.Metric, Histograms: []HPoint{{T: ts, H: s.H}}}
+					mat[i] = Series{Metric: s.Metric, Histograms: []HPoint{{T: ts, H: s.H}}, ShouldDropName: s.ShouldDropName}
 				}
 			}
 			ev.currentSamples = originalNumSamples + mat.TotalSamples()
@@ -1266,7 +1267,7 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 				}
 				ss.ts = ts
 			} else {
-				ss = seriesAndTimestamp{Series{Metric: sample.Metric}, ts}
+				ss = seriesAndTimestamp{Series{Metric: sample.Metric, ShouldDropName: sample.ShouldDropName}, ts}
 			}
 			addToSeries(&ss.Series, enh.Ts, sample.F, sample.H, numSteps)
 			seriess[h] = ss
@@ -1615,6 +1616,13 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		// Process all the calls for one time series at a time.
 		it := storage.NewBuffer(selRange)
 		var chkIter chunkenc.Iterator
+
+		// The last_over_time function acts like offset; thus, it
+		// should keep the metric name.  For all the other range
+		// vector functions, the only change needed is to drop the
+		// metric name in the output.
+		shouldDropName := e.Func.Name != "last_over_time"
+
 		for i, s := range selVS.Series {
 			if err := contextDone(ev.ctx, "expression evaluation"); err != nil {
 				ev.error(err)
@@ -1629,15 +1637,9 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 			chkIter = s.Iterator(chkIter)
 			it.Reset(chkIter)
 			metric := selVS.Series[i].Labels()
-			// The last_over_time function acts like offset; thus, it
-			// should keep the metric name.  For all the other range
-			// vector functions, the only change needed is to drop the
-			// metric name in the output.
-			if e.Func.Name != "last_over_time" {
-				metric = metric.DropMetricName()
-			}
 			ss := Series{
-				Metric: metric,
+				Metric:         metric,
+				ShouldDropName: shouldDropName,
 			}
 			inMatrix[0].Metric = selVS.Series[i].Labels()
 			for ts, step := ev.startTimestamp, -1; ts <= ev.endTimestamp; ts += ev.interval {
@@ -1752,8 +1754,9 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 
 			return Matrix{
 				Series{
-					Metric: createLabelsForAbsentFunction(e.Args[0]),
-					Floats: newp,
+					Metric:         createLabelsForAbsentFunction(e.Args[0]),
+					Floats:         newp,
+					ShouldDropName: shouldDropName,
 				},
 			}, warnings
 		}
@@ -1772,7 +1775,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		mat := val.(Matrix)
 		if e.Op == parser.SUB {
 			for i := range mat {
-				mat[i].Metric = mat[i].Metric.DropMetricName()
+				mat[i].ShouldDropName = true
 				for j := range mat[i].Floats {
 					mat[i].Floats[j].F = -mat[i].Floats[j].F
 				}
@@ -2548,9 +2551,6 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 			continue
 		}
 		metric := resultMetric(ls.Metric, rs.Metric, op, matching, enh)
-		if returnBool {
-			metric = metric.DropMetricName()
-		}
 		insertedSigs, exists := matchedSigs[sig]
 		if matching.Card == parser.CardOneToOne {
 			if exists {
@@ -2573,9 +2573,10 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 		}
 
 		enh.Out = append(enh.Out, Sample{
-			Metric: metric,
-			F:      floatValue,
-			H:      histogramValue,
+			Metric:         metric,
+			F:              floatValue,
+			H:              histogramValue,
+			ShouldDropName: returnBool,
 		})
 	}
 	return enh.Out, lastErr
@@ -2675,7 +2676,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			lhsSample.F = float
 			lhsSample.H = histogram
 			if shouldDropMetricName(op) || returnBool {
-				lhsSample.Metric = lhsSample.Metric.DropMetricName()
+				lhsSample.ShouldDropName = true
 			}
 			enh.Out = append(enh.Out, lhsSample)
 		}
@@ -2973,6 +2974,7 @@ func (ev *evaluator) aggregation(e *parser.AggregateExpr, q float64, inputMatrix
 
 		ss := &outputMatrix[ri]
 		addToSeries(ss, enh.Ts, aggr.floatValue, aggr.histogramValue, numSteps)
+		ss.ShouldDropName = inputMatrix[ri].ShouldDropName
 	}
 
 	return annos
@@ -2999,7 +3001,7 @@ seriesLoop:
 		if !ok {
 			continue
 		}
-		s = Sample{Metric: inputMatrix[si].Metric, F: f}
+		s = Sample{Metric: inputMatrix[si].Metric, F: f, ShouldDropName: inputMatrix[si].ShouldDropName}
 
 		group := &groups[seriesToResult[si]]
 		// Initialize this group if it's the first time we've seen it.
@@ -3083,16 +3085,16 @@ seriesLoop:
 		mat = make(Matrix, 0, len(groups))
 	}
 
-	add := func(lbls labels.Labels, f float64) {
+	add := func(lbls labels.Labels, f float64, shouldDropName bool) {
 		// If this could be an instant query, add directly to the matrix so the result is in consistent order.
 		if ev.endTimestamp == ev.startTimestamp {
-			mat = append(mat, Series{Metric: lbls, Floats: []FPoint{{T: enh.Ts, F: f}}})
+			mat = append(mat, Series{Metric: lbls, Floats: []FPoint{{T: enh.Ts, F: f}}, ShouldDropName: shouldDropName})
 		} else {
 			// Otherwise the results are added into seriess elements.
 			hash := lbls.Hash()
 			ss, ok := seriess[hash]
 			if !ok {
-				ss = Series{Metric: lbls}
+				ss = Series{Metric: lbls, ShouldDropName: shouldDropName}
 			}
 			addToSeries(&ss, enh.Ts, f, nil, numSteps)
 			seriess[hash] = ss
@@ -3109,7 +3111,7 @@ seriesLoop:
 				sort.Sort(sort.Reverse(aggr.heap))
 			}
 			for _, v := range aggr.heap {
-				add(v.Metric, v.F)
+				add(v.Metric, v.F, v.ShouldDropName)
 			}
 
 		case parser.BOTTOMK:
@@ -3118,7 +3120,7 @@ seriesLoop:
 				sort.Sort(sort.Reverse((*vectorByReverseValueHeap)(&aggr.heap)))
 			}
 			for _, v := range aggr.heap {
-				add(v.Metric, v.F)
+				add(v.Metric, v.F, v.ShouldDropName)
 			}
 
 		case parser.LIMITK, parser.LIMIT_RATIO:
@@ -3173,6 +3175,30 @@ func (ev *evaluator) aggregationCountValues(e *parser.AggregateExpr, grouping []
 		})
 	}
 	return enh.Out, nil
+}
+
+func (ev *evaluator) cleanupMetricLabels(v parser.Value) {
+	if v.Type() == parser.ValueTypeMatrix {
+		mat := v.(Matrix)
+		for i := range mat {
+			if mat[i].ShouldDropName {
+				mat[i].Metric = mat[i].Metric.DropMetricName()
+			}
+		}
+		if mat.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	} else if v.Type() == parser.ValueTypeVector {
+		vec := v.(Vector)
+		for i := range vec {
+			if vec[i].ShouldDropName {
+				vec[i].Metric = vec[i].Metric.DropMetricName()
+			}
+		}
+		if vec.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	}
 }
 
 func addToSeries(ss *Series, ts int64, f float64, h *histogram.FloatHistogram, numSteps int) {

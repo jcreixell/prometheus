@@ -458,8 +458,9 @@ func funcClamp(vals []parser.Value, args parser.Expressions, enh *EvalNodeHelper
 	}
 	for _, el := range vec {
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      math.Max(min, math.Min(max, el.F)),
+			Metric:         el.Metric,
+			F:              math.Max(min, math.Min(max, el.F)),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -471,8 +472,9 @@ func funcClampMax(vals []parser.Value, args parser.Expressions, enh *EvalNodeHel
 	max := vals[1].(Vector)[0].F
 	for _, el := range vec {
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      math.Min(max, el.F),
+			Metric:         el.Metric,
+			F:              math.Min(max, el.F),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -484,8 +486,9 @@ func funcClampMin(vals []parser.Value, args parser.Expressions, enh *EvalNodeHel
 	min := vals[1].(Vector)[0].F
 	for _, el := range vec {
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      math.Max(min, el.F),
+			Metric:         el.Metric,
+			F:              math.Max(min, el.F),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -506,8 +509,9 @@ func funcRound(vals []parser.Value, args parser.Expressions, enh *EvalNodeHelper
 	for _, el := range vec {
 		f := math.Floor(el.F*toNearestInverse+0.5) / toNearestInverse
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      f,
+			Metric:         el.Metric,
+			F:              f,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -838,8 +842,9 @@ func simpleFunc(vals []parser.Value, enh *EvalNodeHelper, f func(float64) float6
 	for _, el := range vals[0].(Vector) {
 		if el.H == nil { // Process only float samples.
 			enh.Out = append(enh.Out, Sample{
-				Metric: el.Metric.DropMetricName(),
-				F:      f(el.F),
+				Metric:         el.Metric,
+				F:              f(el.F),
+				ShouldDropName: true,
 			})
 		}
 	}
@@ -984,8 +989,9 @@ func funcTimestamp(vals []parser.Value, args parser.Expressions, enh *EvalNodeHe
 	vec := vals[0].(Vector)
 	for _, el := range vec {
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      float64(el.T) / 1000,
+			Metric:         el.Metric,
+			F:              float64(el.T) / 1000,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1093,8 +1099,9 @@ func funcHistogramCount(vals []parser.Value, args parser.Expressions, enh *EvalN
 			continue
 		}
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      sample.H.Count,
+			Metric:         sample.Metric,
+			F:              sample.H.Count,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1110,8 +1117,9 @@ func funcHistogramSum(vals []parser.Value, args parser.Expressions, enh *EvalNod
 			continue
 		}
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      sample.H.Sum,
+			Metric:         sample.Metric,
+			F:              sample.H.Sum,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1127,8 +1135,9 @@ func funcHistogramAvg(vals []parser.Value, args parser.Expressions, enh *EvalNod
 			continue
 		}
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      sample.H.Sum / sample.H.Count,
+			Metric:         sample.Metric,
+			F:              sample.H.Sum / sample.H.Count,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1166,8 +1175,9 @@ func funcHistogramStdDev(vals []parser.Value, args parser.Expressions, enh *Eval
 		variance += cVariance
 		variance /= sample.H.Count
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      math.Sqrt(variance),
+			Metric:         sample.Metric,
+			F:              math.Sqrt(variance),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1205,8 +1215,9 @@ func funcHistogramStdVar(vals []parser.Value, args parser.Expressions, enh *Eval
 		variance += cVariance
 		variance /= sample.H.Count
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      variance,
+			Metric:         sample.Metric,
+			F:              variance,
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1224,8 +1235,9 @@ func funcHistogramFraction(vals []parser.Value, args parser.Expressions, enh *Ev
 			continue
 		}
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      histogramFraction(lower, upper, sample.H),
+			Metric:         sample.Metric,
+			F:              histogramFraction(lower, upper, sample.H),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out, nil
@@ -1294,8 +1306,9 @@ func funcHistogramQuantile(vals []parser.Value, args parser.Expressions, enh *Ev
 		}
 
 		enh.Out = append(enh.Out, Sample{
-			Metric: sample.Metric.DropMetricName(),
-			F:      histogramQuantile(q, sample.H),
+			Metric:         sample.Metric,
+			F:              histogramQuantile(q, sample.H),
+			ShouldDropName: true,
 		})
 	}
 
@@ -1397,6 +1410,11 @@ func (ev *evaluator) evalLabelReplace(args parser.Expressions) (parser.Value, an
 			lb.Reset(el.Metric)
 			lb.Set(dst, string(res))
 			matrix[i].Metric = lb.Labels()
+			if dst == model.MetricNameLabel {
+				matrix[i].ShouldDropName = false
+			} else {
+				matrix[i].ShouldDropName = el.ShouldDropName
+			}
 		}
 	}
 	if matrix.ContainsSameLabelset() {
@@ -1451,6 +1469,12 @@ func (ev *evaluator) evalLabelJoin(args parser.Expressions) (parser.Value, annot
 		lb.Reset(el.Metric)
 		lb.Set(dst, strval)
 		matrix[i].Metric = lb.Labels()
+
+		if dst == model.MetricNameLabel {
+			matrix[i].ShouldDropName = false
+		} else {
+			matrix[i].ShouldDropName = el.ShouldDropName
+		}
 	}
 
 	return matrix, ws
@@ -1474,8 +1498,9 @@ func dateWrapper(vals []parser.Value, enh *EvalNodeHelper, f func(time.Time) flo
 	for _, el := range vals[0].(Vector) {
 		t := time.Unix(int64(el.F), 0).UTC()
 		enh.Out = append(enh.Out, Sample{
-			Metric: el.Metric.DropMetricName(),
-			F:      f(t),
+			Metric:         el.Metric,
+			F:              f(t),
+			ShouldDropName: true,
 		})
 	}
 	return enh.Out
