@@ -1241,9 +1241,6 @@ func (ev *evaluator) rangeEval(prepSeries func(labels.Labels, *EvalSeriesHelper)
 
 		// If this could be an instant query, shortcut so as not to change sort order.
 		if ev.endTimestamp == ev.startTimestamp {
-			if result.ContainsSameLabelset() {
-				ev.errorf("vector cannot contain metrics with the same labelset")
-			}
 			mat := make(Matrix, len(result))
 			for i, s := range result {
 				if s.H == nil {
@@ -1761,10 +1758,6 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 			}, warnings
 		}
 
-		if mat.ContainsSameLabelset() {
-			ev.errorf("vector cannot contain metrics with the same labelset")
-		}
-
 		return mat, warnings
 
 	case *parser.ParenExpr:
@@ -1779,9 +1772,6 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 				for j := range mat[i].Floats {
 					mat[i].Floats[j].F = -mat[i].Floats[j].F
 				}
-			}
-			if mat.ContainsSameLabelset() {
-				ev.errorf("vector cannot contain metrics with the same labelset")
 			}
 		}
 		return mat, ws
