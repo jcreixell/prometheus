@@ -81,15 +81,16 @@ func LoadedStorage(t testutil.T, input string) *teststorage.TestStorage {
 
 func NewTestEngine(enablePerStepStats bool, lookbackDelta time.Duration, maxSamples int) *promql.Engine {
 	return promql.NewEngine(promql.EngineOpts{
-		Logger:                   nil,
-		Reg:                      nil,
-		MaxSamples:               maxSamples,
-		Timeout:                  100 * time.Second,
-		NoStepSubqueryIntervalFn: func(int64) int64 { return durationMilliseconds(1 * time.Minute) },
-		EnableAtModifier:         true,
-		EnableNegativeOffset:     true,
-		EnablePerStepStats:       enablePerStepStats,
-		LookbackDelta:            lookbackDelta,
+		Logger:                        nil,
+		Reg:                           nil,
+		MaxSamples:                    maxSamples,
+		Timeout:                       100 * time.Second,
+		NoStepSubqueryIntervalFn:      func(int64) int64 { return durationMilliseconds(1 * time.Minute) },
+		EnableAtModifier:              true,
+		EnableNegativeOffset:          true,
+		EnablePerStepStats:            enablePerStepStats,
+		LookbackDelta:                 lookbackDelta,
+		EnableDelayedNameLabelRemoval: true,
 	})
 }
 

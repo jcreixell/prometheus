@@ -313,6 +313,11 @@ type EngineOpts struct {
 
 	// EnablePerStepStats if true allows for per-step stats to be computed on request. Disabled otherwise.
 	EnablePerStepStats bool
+
+	// EnableDelayedNameRemoval delays the removal of the __name__ label to the last step of the query evaluation.
+	// This is useful in certain scenarios where the __name__ label must be preserved or where aggregations by __name__
+	// may otherwise lead to duplicate labelset errors.
+	EnableDelayedNameRemoval bool
 }
 
 // Engine handles the lifetime of queries from beginning to end.
@@ -330,6 +335,7 @@ type Engine struct {
 	enableAtModifier         bool
 	enableNegativeOffset     bool
 	enablePerStepStats       bool
+	enableDelayedNameRemoval bool
 }
 
 // NewEngine returns a new engine.
@@ -420,6 +426,7 @@ func NewEngine(opts EngineOpts) *Engine {
 		enableAtModifier:         opts.EnableAtModifier,
 		enableNegativeOffset:     opts.EnableNegativeOffset,
 		enablePerStepStats:       opts.EnablePerStepStats,
+		enableDelayedNameRemoval: opts.EnableDelayedNameRemoval,
 	}
 }
 
