@@ -58,7 +58,7 @@ func (ls Labels) MatchLabels(on bool, names ...string) Labels {
 	}
 
 	for _, v := range ls {
-		if _, ok := nameSet[v.Name]; on == ok && (on || v.Name != MetricName) {
+		if _, ok := nameSet[v.Name]; on == ok && (on || (v.Name != MetricName) && v.Name != DeletedMetricName) {
 			matchedLabels = append(matchedLabels, v)
 		}
 	}
@@ -126,7 +126,7 @@ func (ls Labels) HashWithoutLabels(b []byte, names ...string) (uint64, []byte) {
 		for j < len(names) && names[j] < ls[i].Name {
 			j++
 		}
-		if ls[i].Name == MetricName || (j < len(names) && ls[i].Name == names[j]) {
+		if ls[i].Name == MetricName || ls[i].Name == DeletedMetricName || (j < len(names) && ls[i].Name == names[j]) {
 			continue
 		}
 		b = append(b, ls[i].Name...)
@@ -352,6 +352,31 @@ func (ls Labels) DropMetricName() Labels {
 			// Avoid modifying original Labels - use [:i:i] so that left slice would not
 			// have any spare capacity and append would have to allocate a new slice for the result.
 			return append(ls[:i:i], ls[i+1:]...)
+		}
+	}
+	return ls
+}
+
+// DropMetricDeletedName returns Labels with "__deleted__name__" removed.
+func (ls Labels) DropMetricDeletedName() Labels {
+	for i, l := range ls {
+		if l.Name == DeletedMetricName {
+			if i == 0 { // Make common case fast with no allocations.
+				return ls[1:]
+			}
+			// Avoid modifying original Labels - use [:i:i] so that left slice would not
+			// have any spare capacity and append would have to allocate a new slice for the result.
+			return append(ls[:i:i], ls[i+1:]...)
+		}
+	}
+	return ls
+}
+
+// MarkMetricNameForDeletion returns Labels with "__name__" marked for deletion.
+func (ls Labels) MarkMetricNameForDeletion() Labels {
+	for i, l := range ls {
+		if l.Name == MetricName {
+			ls[i].Name = DeletedMetricName
 		}
 	}
 	return ls

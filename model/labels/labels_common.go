@@ -24,10 +24,11 @@ import (
 )
 
 const (
-	MetricName   = "__name__"
-	AlertName    = "alertname"
-	BucketLabel  = "le"
-	InstanceName = "instance"
+	MetricName        = "__name__"
+	DeletedMetricName = "__deleted__name__"
+	AlertName         = "alertname"
+	BucketLabel       = "le"
+	InstanceName      = "instance"
 
 	labelSep = '\xfe' // Used at beginning of `Bytes` return.
 	sep      = '\xff' // Used between labels in `Bytes` and `Hash`.

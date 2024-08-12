@@ -1073,6 +1073,24 @@ func (ev *evaluator) Eval(expr parser.Expr) (v parser.Value, ws annotations.Anno
 	defer ev.recover(expr, &ws, &err)
 
 	v, ws = ev.eval(expr)
+
+	if v.Type() == parser.ValueTypeMatrix {
+		mat := v.(Matrix)
+		for i := range mat {
+			mat[i].Metric = mat[i].Metric.DropMetricDeletedName()
+		}
+		if mat.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	} else if v.Type() == parser.ValueTypeVector {
+		vec := v.(Vector)
+		for i := range vec {
+			vec[i].Metric = vec[i].Metric.DropMetricDeletedName()
+		}
+		if vec.ContainsSameLabelset() {
+			ev.errorf("vector cannot contain metrics with the same labelset")
+		}
+	}
 	return v, ws, nil
 }
 
@@ -1634,7 +1652,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 			// vector functions, the only change needed is to drop the
 			// metric name in the output.
 			if e.Func.Name != "last_over_time" {
-				metric = metric.DropMetricName()
+				metric = metric.MarkMetricNameForDeletion()
 			}
 			ss := Series{
 				Metric: metric,
@@ -1772,7 +1790,7 @@ func (ev *evaluator) eval(expr parser.Expr) (parser.Value, annotations.Annotatio
 		mat := val.(Matrix)
 		if e.Op == parser.SUB {
 			for i := range mat {
-				mat[i].Metric = mat[i].Metric.DropMetricName()
+				mat[i].Metric = mat[i].Metric.MarkMetricNameForDeletion()
 				for j := range mat[i].Floats {
 					mat[i].Floats[j].F = -mat[i].Floats[j].F
 				}
@@ -2554,7 +2572,7 @@ func (ev *evaluator) VectorBinop(op parser.ItemType, lhs, rhs Vector, matching *
 		}
 		metric := resultMetric(ls.Metric, rs.Metric, op, matching, enh)
 		if returnBool {
-			metric = metric.DropMetricName()
+			metric = metric.MarkMetricNameForDeletion()
 		}
 		insertedSigs, exists := matchedSigs[sig]
 		if matching.Card == parser.CardOneToOne {
@@ -2593,7 +2611,7 @@ func signatureFunc(on bool, b []byte, names ...string) func(labels.Labels) strin
 			return string(lset.BytesWithLabels(b, names...))
 		}
 	}
-	names = append([]string{labels.MetricName}, names...)
+	names = append([]string{labels.MetricName, labels.DeletedMetricName}, names...)
 	slices.Sort(names)
 	return func(lset labels.Labels) string {
 		return string(lset.BytesWithoutLabels(b, names...))
@@ -2680,7 +2698,7 @@ func (ev *evaluator) VectorscalarBinop(op parser.ItemType, lhs Vector, rhs Scala
 			lhsSample.F = float
 			lhsSample.H = histogram
 			if shouldDropMetricName(op) || returnBool {
-				lhsSample.Metric = lhsSample.Metric.DropMetricName()
+				lhsSample.Metric = lhsSample.Metric.MarkMetricNameForDeletion()
 			}
 			enh.Out = append(enh.Out, lhsSample)
 		}
