@@ -58,6 +58,7 @@ import (
 	"github.com/prometheus/prometheus/rules"
 	"github.com/prometheus/prometheus/scrape"
 	"github.com/prometheus/prometheus/storage"
+	"github.com/prometheus/prometheus/storage/remote"
 	"github.com/prometheus/prometheus/template"
 	"github.com/prometheus/prometheus/util/features"
 	"github.com/prometheus/prometheus/util/httputil"
@@ -121,12 +122,16 @@ var (
 
 // withStackTracer logs the stack trace in case the request panics. The function
 // will re-raise the error which will then be handled by the net/http package.
+// Intentional HTTP aborts are re-raised without logging.
 // It is needed because the go-kit log package doesn't manage properly the
 // panics from net/http (see https://github.com/go-kit/kit/issues/233).
 func withStackTracer(h http.Handler, l *slog.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if err := recover(); err != nil {
+				if err == http.ErrAbortHandler { //nolint:errorlint // Match net/http: only the exact sentinel suppresses panic logging.
+					panic(err)
+				}
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
@@ -285,34 +290,35 @@ type Options struct {
 	NotificationsSub      func() (<-chan notifications.Notification, func(), bool)
 	Flags                 map[string]string
 
-	ListenAddresses            []string
-	CORSOrigin                 *regexp.Regexp
-	ReadTimeout                time.Duration
-	MaxConnections             int
-	ExternalURL                *url.URL
-	RoutePrefix                string
-	UseLocalAssets             bool
-	UserAssetsPath             string
-	ConsoleTemplatesPath       string
-	ConsoleLibrariesPath       string
-	UseOldUI                   bool
-	EnableLifecycle            bool
-	EnableAdminAPI             bool
-	EnableSearch               bool
-	MaxSearchLimit             int
-	PageTitle                  string
-	RemoteReadSampleLimit      int
-	RemoteReadConcurrencyLimit int
-	RemoteReadBytesInFrame     int
-	EnableRemoteWriteReceiver  bool
-	EnableOTLPWriteReceiver    bool
-	ConvertOTLPDelta           bool
-	NativeOTLPDeltaIngestion   bool
-	IsAgent                    bool
-	STZeroIngestionEnabled     bool
-	EnableTypeAndUnitLabels    bool
-	AppendMetadata             bool
-	AppName                    string
+	ListenAddresses             []string
+	CORSOrigin                  *regexp.Regexp
+	ReadTimeout                 time.Duration
+	MaxConnections              int
+	ExternalURL                 *url.URL
+	RoutePrefix                 string
+	UseLocalAssets              bool
+	UserAssetsPath              string
+	ConsoleTemplatesPath        string
+	ConsoleLibrariesPath        string
+	UseOldUI                    bool
+	EnableLifecycle             bool
+	EnableAdminAPI              bool
+	EnableSearch                bool
+	MaxSearchLimit              int
+	PageTitle                   string
+	RemoteReadSampleLimit       int
+	RemoteReadConcurrencyLimit  int
+	RemoteReadBytesInFrame      int
+	EnableRemoteWriteReceiver   bool
+	EnableOTLPWriteReceiver     bool
+	ConvertOTLPDelta            bool
+	NativeOTLPDeltaIngestion    bool
+	IsAgent                     bool
+	STZeroIngestionEnabled      bool
+	EnableTypeAndUnitLabels     bool
+	AppendMetadata              bool
+	EnableReceiveRelabelConfigs bool
+	AppName                     string
 
 	AcceptRemoteWriteProtoMsgs remoteapi.MessageTypes
 
@@ -383,6 +389,19 @@ func New(logger *slog.Logger, o *Options) *Handler {
 	)
 	if o.EnableRemoteWriteReceiver || o.EnableOTLPWriteReceiver {
 		app, appV2 = h.storage, h.storage
+		if o.EnableReceiveRelabelConfigs {
+			relabelConfigFunc := func() config.Config {
+				h.mtx.RLock()
+				defer h.mtx.RUnlock()
+				if h.config == nil {
+					return config.Config{}
+				}
+				return *h.config
+			}
+			relabelCache := remote.NewRelabelCache(o.Registerer)
+			app = remote.NewRelabelingAppendable(app, relabelConfigFunc, relabelCache)
+			appV2 = remote.NewRelabelingAppendableV2(appV2, relabelConfigFunc, relabelCache)
+		}
 	}
 
 	version := ""
@@ -447,6 +466,7 @@ func New(logger *slog.Logger, o *Options) *Handler {
 		r.Set(features.API, "admin", o.EnableAdminAPI)
 		r.Set(features.API, "remote_write_receiver", o.EnableRemoteWriteReceiver)
 		r.Set(features.API, "otlp_write_receiver", o.EnableOTLPWriteReceiver)
+		r.Set(features.API, "receive_relabel_configs", o.EnableReceiveRelabelConfigs)
 		r.Set(features.API, "search", o.EnableSearch)
 		for _, alg := range api_v1.FuzzAlgorithms() {
 			r.Enable(features.API, "search_fuzz_alg_"+alg)
